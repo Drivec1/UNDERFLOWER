@@ -1,6 +1,5 @@
 [gd_scene format=4 uid="uid://cihf33nw53euu"]
 
-[ext_resource type="Script" uid="uid://2cti8p2ixmrh" path="res://autoload/游玩字体.gd" id="2_q3q24"]
 [ext_resource type="Script" uid="uid://be6sr6kvaq7to" path="res://Script/文字控制系统.gd" id="2_u6yvp"]
 [ext_resource type="Texture2D" uid="uid://cpvnwyk6pldcv" path="res://textures/spr_flowey_riseanim_0-Sheet.png" id="2_wqkam"]
 [ext_resource type="Texture2D" uid="uid://dgskhf5ldxdek" path="res://textures/heart/spr_allsoul_0.png" id="3_44kwu"]
@@ -17,11 +16,6 @@
 [ext_resource type="Script" uid="uid://cxtjvdfc4ib8j" path="res://Script/旋转3.gd" id="10_s6o10"]
 [ext_resource type="Script" uid="uid://dudv3s61jftn2" path="res://Script/旋转4.gd" id="12_auq0u"]
 [ext_resource type="Script" uid="uid://c4o6diryu70uo" path="res://Script/旋转5.gd" id="14_kemyd"]
-[ext_resource type="FontFile" uid="uid://bsrin35wg3hk5" path="res://fonts/MonsterFriendFore.otf" id="15_78iai"]
-
-[sub_resource type="LabelSettings" id="LabelSettings_ubxb5"]
-font = ExtResource("15_78iai")
-font_size = 30
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_icb88"]
 atlas = ExtResource("2_wqkam")
@@ -148,34 +142,16 @@ loop = true
 [node name="根节点" type="Node2D" unique_id=1797779452]
 metadata/_edit_use_anchors_ = true
 
-[node name="游玩字体" type="Label" parent="." unique_id=1156034214]
-offset_left = 25.0
-offset_top = 367.0
-offset_right = 154.0
-offset_bottom = 403.0
-text = "PLAY"
-label_settings = SubResource("LabelSettings_ubxb5")
-horizontal_alignment = 1
-vertical_alignment = 1
-justification_flags = 161
-script = ExtResource("2_q3q24")
-
-[node name="设置字体" type="Label" parent="." unique_id=2041230063]
-offset_left = 24.0
-offset_top = 420.0
-offset_right = 291.0
-offset_bottom = 450.0
-text = "Difficulty"
-label_settings = SubResource("LabelSettings_ubxb5")
-horizontal_alignment = 1
-vertical_alignment = 1
-justification_flags = 161
-
 [node name="文字控制系统" type="RichTextLabel" parent="." unique_id=1425674486]
-offset_right = 40.0
-offset_bottom = 40.0
+offset_left = 2.0
+offset_top = 365.0
+offset_right = 639.71
+offset_bottom = 473.0
 bbcode_enabled = true
 text = "PLAY"
+fit_content = true
+scroll_active = false
+shortcut_keys_enabled = false
 script = ExtResource("2_u6yvp")
 
 [node name="小花" type="AnimatedSprite2D" parent="." unique_id=1073901650]

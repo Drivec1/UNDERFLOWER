@@ -33,6 +33,11 @@ window/size/viewport_width=640
 window/size/viewport_height=480
 window/stretch/mode="viewport"
 
+[editor]
+
+movie_writer/disable_vsync=true
+movie_writer/fps=80
+
 [input]
 
 confirm={
