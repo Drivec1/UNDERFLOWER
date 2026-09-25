@@ -1,5 +1,7 @@
 [gd_scene format=4 uid="uid://cihf33nw53euu"]
 
+[ext_resource type="Script" uid="uid://2cti8p2ixmrh" path="res://autoload/游玩字体.gd" id="2_q3q24"]
+[ext_resource type="Script" uid="uid://be6sr6kvaq7to" path="res://Script/文字控制系统.gd" id="2_u6yvp"]
 [ext_resource type="Texture2D" uid="uid://cpvnwyk6pldcv" path="res://textures/spr_flowey_riseanim_0-Sheet.png" id="2_wqkam"]
 [ext_resource type="Texture2D" uid="uid://dgskhf5ldxdek" path="res://textures/heart/spr_allsoul_0.png" id="3_44kwu"]
 [ext_resource type="Texture2D" uid="uid://ccf0qp4bghf46" path="res://textures/heart/spr_allsoul_1.png" id="4_0vn2b"]
@@ -156,6 +158,7 @@ label_settings = SubResource("LabelSettings_ubxb5")
 horizontal_alignment = 1
 vertical_alignment = 1
 justification_flags = 161
+script = ExtResource("2_q3q24")
 
 [node name="设置字体" type="Label" parent="." unique_id=2041230063]
 offset_left = 24.0
@@ -167,6 +170,13 @@ label_settings = SubResource("LabelSettings_ubxb5")
 horizontal_alignment = 1
 vertical_alignment = 1
 justification_flags = 161
+
+[node name="文字控制系统" type="RichTextLabel" parent="." unique_id=1425674486]
+offset_right = 40.0
+offset_bottom = 40.0
+bbcode_enabled = true
+text = "PLAY"
+script = ExtResource("2_u6yvp")
 
 [node name="小花" type="AnimatedSprite2D" parent="." unique_id=1073901650]
 position = Vector2(491, 149)
