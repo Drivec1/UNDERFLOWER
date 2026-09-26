@@ -16,6 +16,8 @@
 [ext_resource type="Script" uid="uid://cxtjvdfc4ib8j" path="res://Script/旋转3.gd" id="10_s6o10"]
 [ext_resource type="Script" uid="uid://dudv3s61jftn2" path="res://Script/旋转4.gd" id="12_auq0u"]
 [ext_resource type="Script" uid="uid://c4o6diryu70uo" path="res://Script/旋转5.gd" id="14_kemyd"]
+[ext_resource type="Texture2D" uid="uid://d0guh8qrqvec6" path="res://textures/spr_asriel_afterimager_full_0.png" id="17_q3q24"]
+[ext_resource type="Script" uid="uid://bhavlhbsvksoj" path="res://autoload/非线性.gd" id="18_tc8fq"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_icb88"]
 atlas = ExtResource("2_wqkam")
@@ -144,9 +146,9 @@ metadata/_edit_use_anchors_ = true
 
 [node name="文字控制系统" type="RichTextLabel" parent="." unique_id=1425674486]
 offset_left = 2.0
-offset_top = 365.0
+offset_top = 419.0
 offset_right = 639.71
-offset_bottom = 473.0
+offset_bottom = 527.0
 bbcode_enabled = true
 text = "PLAY"
 fit_content = true
@@ -201,3 +203,12 @@ stream = SubResource("AudioStreamMP3_2wg2s")
 autoplay = true
 mix_target = 1
 max_polyphony = 10
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=130464233]
+position = Vector2(328, 231)
+scale = Vector2(1.3888888, 1.3888888)
+texture = ExtResource("17_q3q24")
+script = ExtResource("18_tc8fq")
+"循环速度" = 0.38
+"路径缓动" = 0.5
+"圆滑度" = 1.0
