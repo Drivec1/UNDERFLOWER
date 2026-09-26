@@ -85,6 +85,7 @@ func _unhandled_input(event):
 	if current_state == State.MAIN_MENU:
 		# 上键 (静音)
 		if event.is_action_pressed("up"):
+			play_sfx()
 			if not is_play_selected:
 				is_play_selected = true
 				update_ui()
@@ -92,6 +93,7 @@ func _unhandled_input(event):
 			
 		# 下键 (静音)
 		elif event.is_action_pressed("down"):
+			play_sfx()
 			if is_play_selected:
 				is_play_selected = false
 				update_ui()
