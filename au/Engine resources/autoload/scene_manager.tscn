@@ -78,6 +78,7 @@ scale = Vector2(0.888327, 0.82455295)
 texture = SubResource("CompressedTexture2D_3yrol")
 
 [node name="Asriel" type="Sprite2D" parent="." unique_id=1500636581]
+texture_filter = 3
 position = Vector2(320, 188)
 scale = Vector2(1.315, 1.315)
 texture = ExtResource("18_tc8fq")

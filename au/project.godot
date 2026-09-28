@@ -26,6 +26,7 @@ buses/default_bus_layout=""
 
 F4="*uid://cigm0ysjsek5n"
 "打字机"="*uid://dif17bs6l2nhq"
+"全局变量"="*uid://bvuyqi8t167p5"
 
 [display]
 
@@ -79,13 +80,19 @@ right={
 ]
 }
 
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+pointing/emulate_mouse_from_touch=false
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
 
 [rendering]
 
-textures/canvas_textures/default_texture_filter=0
+textures/canvas_textures/default_texture_filter=3
 rendering_device/driver.windows="d3d12"
-renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="forward_plus"
+textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)

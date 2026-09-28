@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://c4y7jyqyaysrv"
 path.s3tc="res://.godot/imported/right.png-633335dd726bd2d8ad34e6c8b7976c7d.s3tc.ctex"
+path.etc2="res://.godot/imported/right.png-633335dd726bd2d8ad34e6c8b7976c7d.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://Material/textures/Asrie/right.png"
-dest_files=["res://.godot/imported/right.png-633335dd726bd2d8ad34e6c8b7976c7d.s3tc.ctex"]
+dest_files=["res://.godot/imported/right.png-633335dd726bd2d8ad34e6c8b7976c7d.s3tc.ctex", "res://.godot/imported/right.png-633335dd726bd2d8ad34e6c8b7976c7d.etc2.ctex"]
 
 [params]
 

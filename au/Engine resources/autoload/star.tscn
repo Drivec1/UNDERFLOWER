@@ -33,6 +33,7 @@ libraries/ = SubResource("AnimationLibrary_ef6vd")
 autoplay = &"RESET"
 
 [node name="闪光控制器" type="ColorRect" parent="动画控制台" unique_id=1124911843]
+texture_filter = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -42,6 +43,7 @@ color = Color(1, 1, 1, 0)
 metadata/_edit_use_anchors_ = true
 
 [node name="Z键说明标签" type="Label" parent="动画控制台/闪光控制器" unique_id=671051676]
+texture_filter = 3
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.67842853
@@ -86,6 +88,7 @@ metadata/_edit_use_anchors_ = true
 [node name="复盖层1" type="ColorRect" parent="动画控制台/闪光控制器/Z键说明标签/游戏主标题" unique_id=1053623677]
 visible = false
 show_behind_parent = true
+texture_filter = 3
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.39173573
