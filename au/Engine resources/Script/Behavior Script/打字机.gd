@@ -14,6 +14,13 @@ extends RichTextLabel
 @export var 音效路径: String = "res://sounds/snd_wngdng7.wav"
 @export var 音效音量: float = 1.0
 
+# ==================== 首字符设置 ====================
+@export_group("首字符设置")
+## 留空 = 不添加；填了字符 = 会先于正文打印出来
+@export var 首字符: String = ""
+## 首字符打印期间是否静音（默认静音）
+@export var 首字符静音: bool = true
+
 # ==================== 运行时变量 ====================
 var 待打印内容: String = ""
 var 当前打印数量: int = 0
@@ -23,6 +30,7 @@ var _正在打印: bool = false
 var _音效播放器: AudioStreamPlayer
 var _解析后的颜色列表: Array[Color] = []
 var _纯文本长度: int = 0
+var _首字符长度: int = 0          # 新增：记录首字符占了多少个可见字符
 
 signal 打字完成
 
@@ -100,18 +108,24 @@ func 开始打印(新的内容: String, 动态配置: Dictionary = {}):
 	if 动态配置.has("自定义颜色字符串"): 自定义颜色字符串 = 动态配置["自定义颜色字符串"]
 	if 动态配置.has("音效路径"): 音效路径 = 动态配置["音效路径"]
 	if 动态配置.has("音效音量"): 音效音量 = 动态配置["音效音量"]
+	# ---- 新增：首字符相关 ----
+	if 动态配置.has("首字符"): 首字符 = 动态配置["首字符"]
+	if 动态配置.has("首字符静音"): 首字符静音 = 动态配置["首字符静音"]
 	
 	_应用字体设置()
 	_应用音效设置()
 	_解析颜色字符串()
 	
 	待打印内容 = 新的内容
-	_纯文本长度 = 待打印内容.length()
+	_首字符长度 = 首字符.length()                      # 记录首字符长度
+	var 完整内容 = 首字符 + 待打印内容                  # 首字符拼在最前面
+	_纯文本长度 = 完整内容.length()
+	
 	var 构建好的文本 = ""
 	var 颜色数量 = _解析后的颜色列表.size()
 	
 	for i in range(_纯文本长度):
-		var 单个字符 = 待打印内容[i]
+		var 单个字符 = 完整内容[i]
 		var 当前颜色 = 默认颜色
 		if 颜色数量 > 0:
 			当前颜色 = _解析后的颜色列表[i % 颜色数量]
@@ -133,10 +147,19 @@ func _process(delta):
 		visible_characters += 1
 		当前打印数量 = visible_characters
 		当前行数 = get_line_count()
-		if _音效播放器 and _音效播放器.stream != null:
+		
+		# ==================== 【音效播放判断】 ====================
+		# 还在打印首字符范围内 -> 不播声音
+		var 允许播放音效 = true
+		if 首字符静音 and 当前打印数量 <= _首字符长度:
+			允许播放音效 = false
+		
+		if 允许播放音效 and _音效播放器 and _音效播放器.stream != null:
 			_音效播放器.play()
+		# ========================================================
+		
 		if 当前打印数量 >= _纯文本长度:
 			_正在打印 = false
 			set_process(false)
-			emit_signal("打字完成" ,"\n[" , Time.get_datetime_string_from_system() ,  "]")
+			emit_signal("打字完成")
 			print("打字机：打印完成！总字数：", 当前打印数量 ,"\n[" , Time.get_datetime_string_from_system() ,  "]")

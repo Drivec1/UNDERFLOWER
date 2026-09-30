@@ -105,3 +105,4 @@ metadata/_edit_use_anchors_ = true
 [node name="背景音乐控制器" type="AudioStreamPlayer" parent="." unique_id=1676979110]
 stream = ExtResource("5_s01fd")
 autoplay = true
+max_polyphony = 10
