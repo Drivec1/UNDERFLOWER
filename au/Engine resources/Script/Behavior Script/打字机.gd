@@ -21,8 +21,18 @@ extends RichTextLabel
 ## 首字符打印期间是否静音（默认静音）
 @export var 首字符静音: bool = true
 
+# ==================== 按键推进设置 ====================
+@export_group("按键推进设置")
+## 是否启用按键推进
+@export var 启用按键推进: bool = false
+## "下一个"的输入动作名（默认对应 Z 键 / confirm）
+@export var 下一个动作名: StringName = &"confirm"
+## "跳过"的输入动作名（默认对应 X 键 / cancel）
+@export var 跳过动作名: StringName = &"cancel"
+
 # ==================== 运行时变量 ====================
 var 待打印内容: String = ""
+var 完整内容: String = ""
 var 当前打印数量: int = 0
 var 当前行数: int = 0
 var _计时器: float = 0.0
@@ -30,9 +40,10 @@ var _正在打印: bool = false
 var _音效播放器: AudioStreamPlayer
 var _解析后的颜色列表: Array[Color] = []
 var _纯文本长度: int = 0
-var _首字符长度: int = 0          # 新增：记录首字符占了多少个可见字符
+var _首字符长度: int = 0
 
 signal 打字完成
+signal 请求下一条
 
 func _ready():
 	z_index = 4096
@@ -40,9 +51,12 @@ func _ready():
 	bbcode_enabled = true
 	scroll_active = true
 	scroll_following = true
-	get_v_scroll_bar().visible = false # 隐藏拖动条
+	get_v_scroll_bar().visible = false
 	
-	# 如果没手动设置大小，给一个默认框，防止看不见字
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	
 	if size.x == 0 or size.y == 0:
 		size = Vector2(800, 200)
 		
@@ -83,24 +97,9 @@ func _解析颜色字符串():
 		if 数值.size() >= 3:
 			_解析后的颜色列表.append(Color(float(数值[0])/255.0, float(数值[1])/255.0, float(数值[2])/255.0))
 
-## 【核心接口】对外公开，外部通过这个传参
+## 【核心接口】对外公开
 func 开始打印(新的内容: String, 动态配置: Dictionary = {}):
-	# ==================== 【位置处理逻辑】 ====================
-	var target_x = 动态配置.get("X", 0)
-	var target_y = 动态配置.get("Y", 0)
-	
-	# 如果 X 和 Y 都是 0，自动居中
-	if target_x == 0 and target_y == 0:
-		var viewport_size = get_viewport_rect().size
-		# 考虑到 RichTextLabel 的 size，确保它本身大小正常
-		position = (viewport_size - size) / 2.0
-		print("打字机位置：居中于 ", position ,"\n[" , Time.get_datetime_string_from_system() ,  "]")
-	else:
-		position = Vector2(target_x, target_y)
-		print("打字机位置：X=", target_x, " Y=", target_y ,"\n[" , Time.get_datetime_string_from_system() ,  "]")
-	# =========================================================
-
-	# 如果传了配置，就覆盖默认值
+	# 覆盖默认值
 	if 动态配置.has("打字间隔"): 打字间隔 = 动态配置["打字间隔"]
 	if 动态配置.has("字体路径"): 字体路径 = 动态配置["字体路径"]
 	if 动态配置.has("字体大小"): 字体大小 = 动态配置["字体大小"]
@@ -108,17 +107,19 @@ func 开始打印(新的内容: String, 动态配置: Dictionary = {}):
 	if 动态配置.has("自定义颜色字符串"): 自定义颜色字符串 = 动态配置["自定义颜色字符串"]
 	if 动态配置.has("音效路径"): 音效路径 = 动态配置["音效路径"]
 	if 动态配置.has("音效音量"): 音效音量 = 动态配置["音效音量"]
-	# ---- 新增：首字符相关 ----
 	if 动态配置.has("首字符"): 首字符 = 动态配置["首字符"]
 	if 动态配置.has("首字符静音"): 首字符静音 = 动态配置["首字符静音"]
+	if 动态配置.has("启用按键推进"): 启用按键推进 = 动态配置["启用按键推进"]
+	if 动态配置.has("下一个动作名"): 下一个动作名 = 动态配置["下一个动作名"]
+	if 动态配置.has("跳过动作名"): 跳过动作名 = 动态配置["跳过动作名"]
 	
 	_应用字体设置()
 	_应用音效设置()
 	_解析颜色字符串()
 	
 	待打印内容 = 新的内容
-	_首字符长度 = 首字符.length()                      # 记录首字符长度
-	var 完整内容 = 首字符 + 待打印内容                  # 首字符拼在最前面
+	_首字符长度 = 首字符.length()
+	完整内容 = 首字符 + 待打印内容
 	_纯文本长度 = 完整内容.length()
 	
 	var 构建好的文本 = ""
@@ -132,7 +133,32 @@ func 开始打印(新的内容: String, 动态配置: Dictionary = {}):
 		构建好的文本 += "[color=#%s]%s[/color]" % [当前颜色.to_html(false), 单个字符]
 	
 	text = 构建好的文本
-	visible_characters = 0   
+	
+	# ==================== 预计算文本尺寸 + 定位 ====================
+	visible_characters = -1
+	await get_tree().process_frame
+	
+	var 内容宽 = get_content_width()
+	var 内容高 = get_content_height()
+	var 视口尺寸 = get_viewport_rect().size
+	
+	var 起始x = (视口尺寸.x - 内容宽) / 2.0
+	var 起始y = (视口尺寸.y - 内容高) / 2.0
+	
+	var target_x = 动态配置.get("X", 0)
+	var target_y = 动态配置.get("Y", 0)
+	if target_x != 0:
+		起始x = target_x - 内容宽 / 2.0
+	if target_y != 0:
+		起始y = target_y - 内容高 / 2.0
+	
+	offset_left = 起始x
+	offset_top = 起始y
+	offset_right = 起始x + 内容宽
+	offset_bottom = 起始y + 内容高
+	# ==========================================================
+	
+	visible_characters = 0
 	当前打印数量 = 0
 	当前行数 = 1
 	_计时器 = 0.0
@@ -148,18 +174,69 @@ func _process(delta):
 		当前打印数量 = visible_characters
 		当前行数 = get_line_count()
 		
-		# ==================== 【音效播放判断】 ====================
-		# 还在打印首字符范围内 -> 不播声音
 		var 允许播放音效 = true
 		if 首字符静音 and 当前打印数量 <= _首字符长度:
 			允许播放音效 = false
 		
 		if 允许播放音效 and _音效播放器 and _音效播放器.stream != null:
 			_音效播放器.play()
-		# ========================================================
 		
 		if 当前打印数量 >= _纯文本长度:
 			_正在打印 = false
 			set_process(false)
 			emit_signal("打字完成")
-			print("打字机：打印完成！总字数：", 当前打印数量 ,"\n[" , Time.get_datetime_string_from_system() ,  "]")
+
+# ==================== 清空当前展示的内容 ====================
+func 清空内容():
+	_正在打印 = false
+	set_process(false)
+	text = ""
+	visible_characters = 0
+	当前打印数量 = 0
+	当前行数 = 1
+	待打印内容 = ""
+	完整内容 = ""
+	_纯文本长度 = 0
+	_首字符长度 = 0
+	_计时器 = 0.0
+	if _音效播放器 and _音效播放器.playing:
+		_音效播放器.stop()
+# ==========================================================
+
+# ==================== 按键推进逻辑 ====================
+func _unhandled_input(event):
+	if not 启用按键推进:
+		return
+	if not event.is_pressed():
+		return
+	
+	# ---- 处理"跳过"键（X / cancel）----
+	if event.is_action_pressed(跳过动作名):
+		if _正在打印:
+			# 打字中按 X：瞬间显示全部文字（停留），不触发下一句
+			_立即完成打印()
+		# else: 打字已完成，X 键什么都不干
+		get_viewport().set_input_as_handled()
+		return
+	
+	# ---- 处理"下一个"键（Z / confirm）----
+	if event.is_action_pressed(下一个动作名):
+		if not _正在打印:
+			# 已经打完按 Z：进入下一句
+			emit_signal("请求下一条")
+		# else: 打字中按 Z 键，什么都不干
+		get_viewport().set_input_as_handled()
+		return
+
+## 立即显示全部文字并结束打字
+func _立即完成打印():
+	_正在打印 = false
+	set_process(false)
+	visible_characters = _纯文本长度
+	当前打印数量 = _纯文本长度
+	当前行数 = get_line_count()
+	if _音效播放器 and _音效播放器.playing:
+		_音效播放器.stop()
+	emit_signal("打字完成")
+	print("打字机：按键跳过打字动画，直接显示全部文字。")
+# ======================================================

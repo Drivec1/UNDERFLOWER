@@ -85,7 +85,7 @@ func _ready():
 			"默认颜色": Color(1.0, 0.0, 0.0, 0.627), # 默认颜色（白色）
 			
 			# --- 音效 ---
-			"音效路径": "res://Material/sounds/SND_TXT2.wav", # 填你项目里的音效路径
+			"音效路径": "res://Material/sounds/snd_txtasr2.wav", # 填你项目里的音效路径
 			"音效音量": 1.0,         # 0.0 到 1.0
 			
 			# --- 位置 ---
