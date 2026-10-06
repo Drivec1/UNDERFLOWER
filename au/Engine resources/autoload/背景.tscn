@@ -1,0 +1,67 @@
+[gd_scene format=3 uid="uid://dx7udggyrkeqo"]
+
+[sub_resource type="Shader" id="Shader_cphpt"]
+code = "shader_type canvas_item;
+
+// ================= 滚动设置 =================
+uniform vec2 scroll_speed = vec2(0.1, 0.0); 
+uniform bool loop = true; 
+
+// ================= 染色与呼吸设置 =================
+// 目标颜色：你想让它变成什么颜色
+uniform vec4 target_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+// 呼吸速度：从零到最高再回零的速度
+uniform float pulse_speed : hint_range(0.1, 10.0) = 1.5;
+// 最低亮度和最高亮度
+uniform float min_brightness : hint_range(0.0, 1.0) = 0.0;
+uniform float max_brightness : hint_range(0.0, 2.0) = 1.0;
+
+void fragment() {
+    // 1. 滚动逻辑
+    vec2 offset = TIME * scroll_speed;
+    vec2 final_uv;
+    
+    if (loop) {
+        final_uv = fract(UV + offset);
+    } else {
+        final_uv = clamp(UV + offset, vec2(0.0), vec2(1.0));
+    }
+    
+    // 2. 读取贴图原本的颜色（保留原图的纹理和明暗）
+    vec4 tex_color = texture(TEXTURE, final_uv);
+    
+    // 3. 提取明暗信息（灰度值），这样即使原图是彩色的，也能精准染成你想要的颜色
+    float gray = dot(tex_color.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 base_color = target_color.rgb * gray;
+    
+    // 4. 计算“从零到最高再回零”的循环因子 (利用 sin 函数在 0 到 1 之间来回摆动)
+    float pulse = (sin(TIME * pulse_speed) + 1.0) * 0.5;
+    
+    // 5. 在最低亮度和最高亮度之间平滑过渡
+    float current_brightness = mix(min_brightness, max_brightness, pulse);
+    
+    // 6. 应用亮度并输出最终颜色（保留透明通道）
+    COLOR = vec4(base_color * current_brightness, tex_color.a);
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ubxb5"]
+shader = SubResource("Shader_cphpt")
+shader_parameter/scroll_speed = Vector2(0.1, 0)
+shader_parameter/loop = true
+shader_parameter/target_color = Color(0.9999998, 0.9362931, 0.9677618, 1)
+shader_parameter/pulse_speed = 1.5
+shader_parameter/min_brightness = 0.0
+shader_parameter/max_brightness = 1.0
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_3yrol"]
+load_path = "res://.godot/imported/left.png-5981626f6f61eefcdda525ceb56f9fc7.s3tc.ctex"
+
+[node name="背景" type="Sprite2D" unique_id=414014299]
+z_index = -4096
+z_as_relative = false
+texture_filter = 3
+material = SubResource("ShaderMaterial_ubxb5")
+position = Vector2(311, 234)
+scale = Vector2(0.888327, 0.82455295)
+texture = SubResource("CompressedTexture2D_3yrol")
