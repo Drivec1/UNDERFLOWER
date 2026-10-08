@@ -13,7 +13,7 @@ config_version=5
 config/name="AU"
 config/version="1.3.0.0"
 config/tags=PackedStringArray("au")
-run/main_scene="uid://c0xs1my4gryc7"
+run/main_scene="uid://delftjy7lw0y6"
 config/features=PackedStringArray("4.7", "Mobile")
 boot_splash/show_image=false
 config/icon="uid://ccgeky6efu2m"
@@ -26,8 +26,7 @@ buses/default_bus_layout=""
 
 F4="*uid://cigm0ysjsek5n"
 "全局变量"="*uid://bvuyqi8t167p5"
-"打字机"="*uid://dif17bs6l2nhq"
-"舞台"="*uid://di758x3l3e02t"
+"打字机"="*uid://cjkns7r88syjm"
 
 [display]
 
@@ -98,3 +97,5 @@ renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true

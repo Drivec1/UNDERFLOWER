@@ -1,0 +1,67 @@
+[gd_resource type="SpriteFrames" format=3 uid="uid://dm52d4pbd2avr"]
+
+[ext_resource type="Texture2D" uid="uid://d0guh8qrqvec6" path="res://资源(导入)/贴图/逐梦/全身.png" id="1_ruj5k"]
+[ext_resource type="Texture2D" uid="uid://btopabqaapl44" path="res://资源(导入)/贴图/逐梦/摇头/1.png" id="2_o3cqq"]
+[ext_resource type="Texture2D" uid="uid://deoy1ybh4vajk" path="res://资源(导入)/贴图/逐梦/摇头/2.png" id="3_xdp3j"]
+[ext_resource type="Texture2D" uid="uid://cvlqhs22uodxa" path="res://资源(导入)/贴图/逐梦/摇头/3.png" id="4_ar8wf"]
+[ext_resource type="Texture2D" uid="uid://nt8x4xwafsp6" path="res://资源(导入)/贴图/逐梦/摇头/4.png" id="5_hlhaj"]
+[ext_resource type="Texture2D" uid="uid://brf3utxkoa4ed" path="res://资源(导入)/贴图/逐梦/摇头/5.png" id="6_mf3h5"]
+[ext_resource type="Texture2D" uid="uid://ccbsdidf8yf3s" path="res://资源(导入)/贴图/逐梦/摇头/6.png" id="7_fhcbs"]
+
+[resource]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("1_ruj5k")
+}],
+"loop": 0,
+"name": &"default",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("2_o3cqq")
+}, {
+"duration": 1.0,
+"texture": ExtResource("3_xdp3j")
+}, {
+"duration": 1.0,
+"texture": ExtResource("4_ar8wf")
+}, {
+"duration": 1.0,
+"texture": ExtResource("5_hlhaj")
+}, {
+"duration": 1.0,
+"texture": ExtResource("2_o3cqq")
+}, {
+"duration": 1.0,
+"texture": ExtResource("3_xdp3j")
+}, {
+"duration": 1.0,
+"texture": ExtResource("4_ar8wf")
+}, {
+"duration": 1.0,
+"texture": ExtResource("5_hlhaj")
+}, {
+"duration": 1.0,
+"texture": ExtResource("2_o3cqq")
+}, {
+"duration": 1.0,
+"texture": ExtResource("3_xdp3j")
+}, {
+"duration": 1.0,
+"texture": ExtResource("4_ar8wf")
+}, {
+"duration": 1.0,
+"texture": ExtResource("5_hlhaj")
+}, {
+"duration": 1.0,
+"texture": ExtResource("6_mf3h5")
+}, {
+"duration": 1.0,
+"texture": ExtResource("7_fhcbs")
+}],
+"loop": 0,
+"name": &"摇头",
+"speed": 8.0
+}]

@@ -1,0 +1,557 @@
+[gd_scene format=3 uid="uid://cihf33nw53euu"]
+
+[ext_resource type="SpriteFrames" uid="uid://dm52d4pbd2avr" path="res://引擎资源(内置)/动画/帧动画(SpriteFrames)/new_sprite_frames.tres" id="1_3qbgb"]
+[ext_resource type="AudioStream" uid="uid://bmpql17mgjcas" path="res://资源(导入)/音频/音乐/Finale.mp3" id="4_k5bo8"]
+[ext_resource type="AudioStream" uid="uid://cxd37lcma1ch4" path="res://资源(导入)/音频/音效/按钮/Squeak.wav" id="10_doxcc"]
+[ext_resource type="Texture2D" uid="uid://byvr6r615p8d3" path="res://资源(导入)/贴图/炫酷背景.png" id="11_jyykk"]
+
+[sub_resource type="Shader" id="Shader_e3e7r"]
+code = "shader_type canvas_item;
+
+// ================= 滚动设置 =================
+uniform vec2 scroll_speed = vec2(0.1, 0.0);
+uniform bool loop = true;
+// 像素对齐：滚动量按整张贴图像素推进（像素画保持开启）
+uniform bool pixel_snap = true;
+
+// ================= 染色与呼吸设置 =================
+uniform vec4 target_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+uniform float pulse_speed : hint_range(0.1, 10.0) = 1.5;
+uniform float min_brightness : hint_range(0.0, 1.0) = 0.0;
+uniform float max_brightness : hint_range(0.0, 2.0) = 1.0;
+
+// 人眼亮度权重（ITU-R BT.601）
+const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+
+void fragment() {
+	// ---------- 1. 这次要滚动几个「贴图像素」 ----------
+	vec2 texel = TEXTURE_PIXEL_SIZE;       // 1 个贴图像素 = 多少 UV
+	vec2 offset_uv = TIME * scroll_speed;  // 偏移量（UV）
+
+	// 循环模式先把偏移折回 0~1，挂机很久也不会因数值过大丢精度
+	if (loop) {
+		offset_uv = fract(offset_uv);
+	}
+
+	vec2 offset_px = offset_uv / texel;    // 换算成「贴图像素」
+	if (pixel_snap) {
+		// 对齐到整数像素：位移不带小数，
+		// 纹素的取舍规律就不会每帧变化 —— 消除爬行 / 闪烁
+		offset_px = floor(offset_px + 0.5);
+	}
+
+	// ---------- 2. 采样坐标 ----------
+	vec2 final_uv = UV + offset_px * texel;
+	if (loop) {
+		final_uv = fract(final_uv);
+	} else {
+		final_uv = clamp(final_uv, vec2(0.0), vec2(1.0));
+	}
+
+	// 保持最近邻采样 —— 像素画要的是清晰，不是模糊
+	vec4 tex_color = texture(TEXTURE, final_uv);
+
+	// ---------- 3. 染色与呼吸 ----------
+	float gray = dot(tex_color.rgb, LUMA);
+	float pulse = (sin(TIME * pulse_speed) + 1.0) * 0.5;
+	float brightness = mix(min_brightness, max_brightness, pulse);
+	COLOR = vec4(target_color.rgb * (gray * brightness), tex_color.a);
+}"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_v4vej"]
+shader = SubResource("Shader_e3e7r")
+shader_parameter/scroll_speed = Vector2(0.1, 0)
+shader_parameter/loop = true
+shader_parameter/pixel_snap = true
+shader_parameter/target_color = Color(1, 1, 1, 1)
+shader_parameter/pulse_speed = 1.5
+shader_parameter/min_brightness = 0.0
+shader_parameter/max_brightness = 1.0
+
+[sub_resource type="GDScript" id="GDScript_n0re6"]
+resource_name = "Asriel"
+script/source = "extends AnimatedSprite2D
+# ==========================================================
+# Asriel 一体式脚本（一个节点版）
+#   场景树里只有本节点。
+#   RichTextLabel / CanvasLayer / AudioStreamPlayer 全部代码动态创建。
+# ==========================================================
+
+
+# ==================== 菜单状态 ====================
+enum State { MAIN_MENU, SELECTING_DIFFICULTY }
+var current_state: int = State.MAIN_MENU
+
+var is_play_selected: bool = true
+var current_difficulty_index: int = 2
+var difficulty_options = [\"PEACE\", \"EASY\", \"NORMAL\", \"HARD\", \"EXPERT\", \"MASTER\"]
+var difficulty_colors = [
+	\"#00CC00\",
+	\"#4169E1\",
+	\"#00CED1\",
+	\"#FF8C00\",
+	\"#8B008B\",
+	\"#FFD700\",
+]
+
+var selected_difficulty: String = \"NORMAL\"
+const DEFAULT_DIFFICULTY = \"NORMAL\"
+const DEFAULT_DIFFICULTY_INDEX = 2
+
+@export var ui_sfx: AudioStream
+
+@export_group(\"背景音乐\")
+## 🔥 拖入你的 BGM 音频资源，会自动循环播放
+@export var 背景音乐: AudioStream
+@export_range(-80.0, 6.0, 0.5) var 背景音乐音量_db: float = 0.0
+@export var 背景音乐自动播放: bool = true
+
+
+# ==================== 动态创建的节点 ====================
+var _canvas层: CanvasLayer
+var _文字标签: RichTextLabel
+var _音效播放器: AudioStreamPlayer
+var _背景音乐播放器: AudioStreamPlayer
+
+
+# ==================== ∞ 移动参数 ====================
+@export var 半径: float = 100.0
+@export var 循环速度: float = 0.4
+var 执行剧情中: bool = false
+var 停止循环移动: bool = false
+
+@export_group(\"非线性设置\")
+@export var 启用非线性: bool = true:
+	set(value):
+		启用非线性 = value
+		notify_property_list_changed()
+@export_range(0.1, 5.0, 0.1) var 路径缓动: float = 1.0
+@export var 中心点停顿: bool = true
+
+@export_group(\"曲线平滑度\")
+@export_range(0.1, 1.0, 0.05) var 圆滑度: float = 0.4
+
+@export_group(\"残影设置\")
+@export var 启用残影: bool = true
+@export var 残影间隔: float = 0.04
+@export var 残影存活时间: float = 0.6
+@export_range(0.0, 1.0, 0.05) var 残影初始不透明度: float = 0.7
+@export_range(0.3, 1.0, 0.05) var 残影缩小比例: float = 1.0
+@export var 残影颜色: Color = Color(1, 1, 1, 1)
+@export var 残影用彩虹色: bool = true
+@export var 彩虹变化速度: float = 0.667
+@export_range(0.0, 1.0, 0.05) var 彩虹饱和度: float = 0.9
+@export var 残影数量上限: int = 30
+
+@export_group(\"菜单文字设置\")
+@export var 菜单字体路径: String = \"res://资源(导入)/字体/MonsterFriendFore.otf\"
+@export var 菜单字号: int = 30
+## 🔥 文字控制系统在屏幕上的位置（检查器里可直接调）
+@export var 菜单文字位置: Vector2 = Vector2(100, 100)
+## 文字控件的大小，一般不用改
+@export var 菜单文字尺寸: Vector2 = Vector2(800, 400)
+
+@export_group(\"剧情移动设置\")
+## 🔥 主角剧情移动的目标位置（世界坐标，检查器里可直接调）
+@export var 剧情移动目标位置: Vector2 = Vector2(500, 300)
+## 🔥 主角移动所花的时间（秒）
+@export_range(0.1, 10.0, 0.1) var 剧情移动时长: float = 1.0
+
+@export_group(\"剧情设置\")
+@export var 下一场景路径: String = \"res://Engine resources/autoload/遭遇动画.tscn\"
+
+signal 移动完成
+signal 剧情完成
+
+var 正在移动: bool = false
+var 原始进度: float = 0.0
+var 初始位置: Vector2 = Vector2.ZERO
+var 平滑曲线: Curve2D
+var 缓存曲线总长: float = 0.0
+var 残影计时: float = 0.0
+var 彩虹相位: float = 0.0
+
+# 残影专用材质：加法混合。
+# 黑色部分加 0 = 完全不显示，白色部分加白 = 发光，
+# 所以拖尾只会出现在角色贴图里白色的位置。
+var 残影材质: CanvasItemMaterial
+
+
+func _validate_property(property: Dictionary) -> void:
+	if not 启用非线性:
+		if property.name == \"路径缓动\" or property.name == \"中心点停顿\":
+			property.usage = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY
+
+
+# ==================== 初始化 ====================
+func _ready() -> void:
+	# ---- 1. CanvasLayer ----
+	_canvas层 = CanvasLayer.new()
+	_canvas层.name = \"UI层\"
+	_canvas层.layer = 50
+	add_child(_canvas层)
+
+	# ---- 2. RichTextLabel ----
+	_文字标签 = RichTextLabel.new()
+	_文字标签.name = \"文字控制系统\"
+	_文字标签.bbcode_enabled = true
+	_文字标签.scroll_active = false
+	_文字标签.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_文字标签.position = 菜单文字位置   # ← 用导出变量
+	_文字标签.size = 菜单文字尺寸
+
+	var 菜单字体 = load(菜单字体路径)
+	if 菜单字体:
+		_文字标签.add_theme_font_override(\"normal_font\", 菜单字体)
+	_文字标签.add_theme_font_size_override(\"normal_font_size\", 菜单字号)
+
+	_canvas层.add_child(_文字标签)
+
+		# ---- 3. AudioStreamPlayer（菜单按键音效） ----
+	_音效播放器 = AudioStreamPlayer.new()
+	_音效播放器.name = \"Finale\"
+	add_child(_音效播放器)
+
+	# ---- 3.5 背景音乐播放器 ----
+	_背景音乐播放器 = AudioStreamPlayer.new()
+	_背景音乐播放器.name = \"BGM\"
+	add_child(_背景音乐播放器)
+	if 背景音乐:
+		_背景音乐播放器.stream = 背景音乐
+		_背景音乐播放器.volume_db = 背景音乐音量_db
+		# 循环播放
+		if 背景音乐 is AudioStreamWAV:
+			# WAV 格式需要手动设置循环点，一般忽略，直接靠流本身的 loop 属性
+			pass
+		elif 背景音乐 is AudioStreamOggVorbis:
+			背景音乐.loop = true
+		elif 背景音乐 is AudioStreamMP3:
+			背景音乐.loop = true
+		if 背景音乐自动播放:
+			_背景音乐播放器.play()
+	else:
+		push_warning(\"Asriel: 未设置 '背景音乐'，BGM 不会播放。\")
+
+	# ---- 4. 菜单状态初始化 ----
+	current_difficulty_index = 全局变量.当前难度
+	if current_difficulty_index < 0 or current_difficulty_index >= difficulty_options.size():
+		current_difficulty_index = DEFAULT_DIFFICULTY_INDEX
+	selected_difficulty = difficulty_options[current_difficulty_index]
+	update_ui()
+
+	# ---- 5. ∞ 移动初始化 ----
+	初始位置 = position
+	构建平滑曲线()
+	if sprite_frames and not is_playing():
+		play()
+
+
+# ==================== 菜单 UI ====================
+func update_ui() -> void:
+	if _文字标签 == null:
+		return
+
+	if current_state == State.MAIN_MENU:
+		if is_play_selected:
+			_文字标签.text = \"[color=yellow]pLaY[/color]\\ndifficulty\"
+		else:
+			_文字标签.text = \"pLaY\\n[color=yellow]difficulty[/color]\"
+	elif current_state == State.SELECTING_DIFFICULTY:
+		var 当前难度名 = difficulty_options[current_difficulty_index]
+		var 当前颜色 = difficulty_colors[current_difficulty_index]
+		_文字标签.text = \"pLaY\\n[color=yellow]difficulty[/color]   [color=\" + 当前颜色 + \"]\" + 当前难度名 + \"[/color]\"
+
+
+func play_sfx() -> void:
+	if ui_sfx and _音效播放器:
+		_音效播放器.stream = ui_sfx
+		_音效播放器.play()
+
+
+# ==================== 输入统一处理 ====================
+func _unhandled_input(event: InputEvent) -> void:
+	if 正在移动 or 执行剧情中:
+		return
+
+	if current_state == State.MAIN_MENU:
+		if event.is_action_pressed(\"up\"):
+			if not is_play_selected:
+				is_play_selected = true
+				play_sfx()
+				update_ui()
+			get_viewport().set_input_as_handled()
+
+		elif event.is_action_pressed(\"down\"):
+			if is_play_selected:
+				is_play_selected = false
+				play_sfx()
+				update_ui()
+			get_viewport().set_input_as_handled()
+
+		elif event.is_action_pressed(\"confirm\"):
+			play_sfx()
+			if is_play_selected:
+				get_viewport().set_input_as_handled()
+				# 🔥 用导出变量
+				平滑移动到目标(剧情移动目标位置, 剧情移动时长)
+			else:
+				current_state = State.SELECTING_DIFFICULTY
+				current_difficulty_index = 全局变量.当前难度
+				if current_difficulty_index < 0 or current_difficulty_index >= difficulty_options.size():
+					current_difficulty_index = DEFAULT_DIFFICULTY_INDEX
+				update_ui()
+				get_viewport().set_input_as_handled()
+
+	elif current_state == State.SELECTING_DIFFICULTY:
+		if event.is_action_pressed(\"left\"):
+			if current_difficulty_index > 0:
+				current_difficulty_index -= 1
+				play_sfx()
+				update_ui()
+			get_viewport().set_input_as_handled()
+
+		elif event.is_action_pressed(\"right\"):
+			if current_difficulty_index < difficulty_options.size() - 1:
+				current_difficulty_index += 1
+				play_sfx()
+				update_ui()
+			get_viewport().set_input_as_handled()
+
+		elif event.is_action_pressed(\"confirm\"):
+			play_sfx()
+			selected_difficulty = difficulty_options[current_difficulty_index]
+			全局变量.当前难度 = current_difficulty_index
+			print(\"确认难度 难度：\", selected_difficulty, \"\\n[\", Time.get_datetime_string_from_system(), \"]\")
+			current_state = State.MAIN_MENU
+			update_ui()
+			get_viewport().set_input_as_handled()
+
+		elif event.is_action_pressed(\"cancel\"):
+			play_sfx()
+			current_difficulty_index = 全局变量.当前难度
+			if current_difficulty_index < 0 or current_difficulty_index >= difficulty_options.size():
+				current_difficulty_index = DEFAULT_DIFFICULTY_INDEX
+			print(\"取消难度选择 难度：\", selected_difficulty, \"\\n[\", Time.get_datetime_string_from_system(), \"]\")
+			current_state = State.MAIN_MENU
+			update_ui()
+			get_viewport().set_input_as_handled()
+
+
+# ==================== ∞ 路径 ====================
+func 构建平滑曲线() -> void:
+	平滑曲线 = Curve2D.new()
+	var d = 半径 * 圆滑度
+	var c = d * 0.7
+
+	平滑曲线.add_point(Vector2(-半径, -半径), Vector2(c, c), Vector2(-d, 0))
+	平滑曲线.add_point(Vector2(-半径, 半径), Vector2(-d, 0), Vector2(c, -c))
+	平滑曲线.add_point(Vector2(半径, -半径), Vector2(-c, c), Vector2(d, 0))
+	平滑曲线.add_point(Vector2(半径, 半径), Vector2(d, 0), Vector2(-c, -c))
+	平滑曲线.add_point(Vector2(-半径, -半径), Vector2(c, c), Vector2(-d, 0))
+
+	平滑曲线.bake_interval = 1.0
+	缓存曲线总长 = 平滑曲线.get_baked_length()
+
+
+func _process(delta: float) -> void:
+	if not 正在移动 and not 停止循环移动:
+		原始进度 = fmod(原始进度 + 循环速度 * delta, 1.0)
+		var 当前进度: float = 原始进度
+
+		if 启用非线性:
+			if 中心点停顿:
+				var t := 原始进度
+				if t < 0.375:
+					当前进度 = 0.375 * _平滑缓动(t / 0.375, 路径缓动)
+				elif t < 0.5:
+					当前进度 = 0.375 + 0.125 * _平滑缓动((t - 0.375) / 0.125, 路径缓动)
+				elif t < 0.875:
+					当前进度 = 0.5 + 0.375 * _平滑缓动((t - 0.5) / 0.375, 路径缓动)
+				else:
+					当前进度 = 0.875 + 0.125 * _平滑缓动((t - 0.875) / 0.125, 路径缓动)
+			else:
+				当前进度 = _平滑缓动(原始进度, 路径缓动)
+		else:
+			当前进度 = 原始进度
+
+		var 偏移位置 = 平滑曲线.sample_baked(当前进度 * 缓存曲线总长)
+		position = 初始位置 + 偏移位置
+
+	if 启用残影 and 残影间隔 > 0.0:
+		残影计时 += delta
+		while 残影计时 >= 残影间隔:
+			残影计时 -= 残影间隔
+			生成残影()
+
+
+# ==================== 平滑移动 + 触发剧情 ====================
+func 平滑移动到目标(目标位置: Vector2, 时长: float = 1.0) -> void:
+	if 正在移动:
+		push_warning(\"Asriel: 角色正在移动中，忽略本次移动请求\")
+		return
+	正在移动 = true
+
+	var tween = create_tween()
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(self, \"global_position\", 目标位置, 时长)
+	await tween.finished
+
+	正在移动 = false
+	初始位置 = global_position
+	原始进度 = 0.0
+	停止循环移动 = true
+
+	移动完成.emit()
+	await 执行剧情()
+
+
+# ==================== 剧情执行 ====================
+func 执行剧情() -> void:
+	执行剧情中 = true
+
+	play(\"摇头\")
+	await animation_finished
+
+	var 完整配置 = {
+		\"打字间隔\": 0.05,
+		\"字体路径\": \"res://资源(导入)/字体/FZXS_ 14_fixed.ttf\",
+		\"字体大小\": 30,
+		\"默认颜色\": Color(1.0, 1.0, 1.0, 1.0),
+		\"自定义颜色字符串\": \"\",
+		\"音效路径\": \"res://资源(导入)/音频/音效/说话/Txtasr2.wav\",
+		\"音效音量\": 1.0,
+		\"X\": 320.0,
+		\"Y\": 360,
+		\"首字符\": \"*\",
+		\"首字符静音\": true,
+		\"启用按键推进\": true,
+	}
+
+	await 打字机.开始打印(\"你还不明白吗你这个杀人犯\", 完整配置)
+	await 打字机.请求下一条
+
+	await 打字机.开始打印(\"一遍遍的杀戮一遍遍的屠杀\", 完整配置)
+	await 打字机.请求下一条
+
+	await 打字机.开始打印(\"我已经厌倦了\", 完整配置)
+	await 打字机.请求下一条
+
+	await 打字机.开始打印(\"可是你还是一遍遍地杀戮着我的同伴\", 完整配置)
+	await 打字机.请求下一条
+
+	await 打字机.开始打印(\"一次次的无能为力\", 完整配置)
+	await 打字机.请求下一条
+
+	await 打字机.开始打印(\"所以\", 完整配置)
+	await 打字机.请求下一条
+
+	await 打字机.开始打印(\"审判开始!\", {
+		\"打字间隔\": 0.05,
+		\"字体路径\": \"res://资源(导入)/字体/FZXS_ 14_fixed.ttf\",
+		\"字体大小\": 30,
+		\"默认颜色\": Color(1.0, 0.0, 0.0, 1.0),
+		\"音效路径\": \"res://资源(导入)/音频/音效/说话/Txtasr2.wav\",
+		\"音效音量\": 1.0,
+		\"X\": 320.0,
+		\"Y\": 360,
+		\"首字符\": \"*\",
+		\"首字符静音\": true,
+		\"启用按键推进\": true
+	})
+	await 打字机.请求下一条
+	打字机.清空内容()
+
+	剧情完成.emit()
+
+	执行剧情中 = false
+
+	if 下一场景路径 != \"\":
+		get_tree().change_scene_to_file(\"res://引擎资源(内置)/场景/遭遇动画.tscn\")
+
+
+# ==================== 残影 ====================
+func 生成残影() -> void:
+	if sprite_frames == null:
+		return
+
+	if get_tree().get_nodes_in_group(\"残影\").size() >= 残影数量上限:
+		return
+
+	var 当前纹理 = sprite_frames.get_frame_texture(animation, frame)
+	if 当前纹理 == null:
+		return
+
+	if 残影材质 == null:
+		残影材质 = CanvasItemMaterial.new()
+		残影材质.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+
+	var 幽灵 := Sprite2D.new()
+	幽灵.texture = 当前纹理
+	幽灵.material = 残影材质
+	幽灵.global_position = global_position
+	幽灵.global_rotation = global_rotation
+	幽灵.scale = scale
+	幽灵.z_index = z_index - 1
+	幽灵.flip_h = flip_h
+	幽灵.flip_v = flip_v
+	幽灵.add_to_group(\"残影\")
+
+	if 残影用彩虹色:
+		彩虹相位 = fmod(彩虹相位 + 彩虹变化速度 * 0.1, 1.0)
+		var 彩虹 := Color.from_hsv(彩虹相位, 彩虹饱和度, 1.0)
+		幽灵.modulate = Color(彩虹.r, 彩虹.g, 彩虹.b, 残影初始不透明度)
+	else:
+		幽灵.modulate = Color(残影颜色.r, 残影颜色.g, 残影颜色.b, 残影初始不透明度)
+
+	var 父节点 = get_parent()
+	if 父节点:
+		父节点.add_child(幽灵)
+	else:
+		push_warning(\"Asriel: 没有父节点，残影生成失败\")
+		return
+
+	var tween := 幽灵.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(幽灵, \"modulate:a\", 0.0, 残影存活时间)
+	tween.tween_property(幽灵, \"scale\", scale * 残影缩小比例, 残影存活时间)
+
+	tween.finished.connect(func():
+		if is_instance_valid(幽灵):
+			幽灵.queue_free()
+	)
+
+
+func _平滑缓动(x: float, 强度: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	var smooth := x * x * (3.0 - 2.0 * x)
+	if 强度 != 1.0:
+		smooth = pow(smooth, 强度)
+	return smooth
+"
+
+[node name="根节点" type="Node2D" unique_id=1797779452]
+metadata/_edit_use_anchors_ = true
+
+[node name="背景" type="Sprite2D" parent="." unique_id=414014299]
+z_index = -4096
+z_as_relative = false
+texture_filter = 3
+material = SubResource("ShaderMaterial_v4vej")
+position = Vector2(311, 234)
+scale = Vector2(1, 1)
+texture = ExtResource("11_jyykk")
+
+[node name="Asriel" type="AnimatedSprite2D" parent="." unique_id=834421130]
+position = Vector2(320, 200)
+scale = Vector2(2, 2)
+sprite_frames = ExtResource("1_3qbgb")
+autoplay = "default"
+frame_progress = 1.0
+script = SubResource("GDScript_n0re6")
+ui_sfx = ExtResource("10_doxcc")
+"背景音乐" = ExtResource("4_k5bo8")
+"循环速度" = 0.2
+"圆滑度" = 1.0
+"菜单文字位置" = Vector2(4, 420)
+"剧情移动目标位置" = Vector2(320, 180)

@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://dh6sj1nnrmimr"]
+
+[ext_resource type="Texture2D" uid="uid://b6k7l220yielc" path="res://资源(导入)/贴图/逐梦/附件/自定义.png" id="1_j2q8x"]
+[ext_resource type="Texture2D" uid="uid://cafmysbx6h40f" path="res://资源(导入)/贴图/逐梦/附件/右手.png" id="2_112p8"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_ubxb5"]
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_auy2n"]
+
+[node name="Node" type="Node" unique_id=83611381]
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=639983543]
+position = Vector2(198, 320)
+texture = ExtResource("1_j2q8x")
+
+[node name="Sprite2D" type="Sprite2D" parent="Sprite2D" unique_id=996102689]
+texture = ExtResource("2_112p8")
+
+[node name="Sprite2D2" type="Sprite2D" parent="Sprite2D" unique_id=897687955]
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="Sprite2D" unique_id=1564138666]
+material = SubResource("CanvasItemMaterial_ubxb5")
+sprite_frames = SubResource("SpriteFrames_auy2n")
