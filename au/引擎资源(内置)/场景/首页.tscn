@@ -2,6 +2,7 @@
 
 [ext_resource type="SpriteFrames" uid="uid://dm52d4pbd2avr" path="res://引擎资源(内置)/动画/帧动画(SpriteFrames)/new_sprite_frames.tres" id="1_3qbgb"]
 [ext_resource type="AudioStream" uid="uid://bmpql17mgjcas" path="res://资源(导入)/音频/音乐/Finale.mp3" id="4_k5bo8"]
+[ext_resource type="PackedScene" uid="uid://dh6sj1nnrmimr" path="res://node.tscn" id="5_3qbgb"]
 [ext_resource type="AudioStream" uid="uid://cxd37lcma1ch4" path="res://资源(导入)/音频/音效/按钮/Squeak.wav" id="10_doxcc"]
 [ext_resource type="Texture2D" uid="uid://byvr6r615p8d3" path="res://资源(导入)/贴图/炫酷背景.png" id="11_jyykk"]
 
@@ -539,7 +540,6 @@ z_as_relative = false
 texture_filter = 3
 material = SubResource("ShaderMaterial_v4vej")
 position = Vector2(311, 234)
-scale = Vector2(1, 1)
 texture = ExtResource("11_jyykk")
 
 [node name="Asriel" type="AnimatedSprite2D" parent="." unique_id=834421130]
@@ -551,7 +551,12 @@ frame_progress = 1.0
 script = SubResource("GDScript_n0re6")
 ui_sfx = ExtResource("10_doxcc")
 "背景音乐" = ExtResource("4_k5bo8")
-"循环速度" = 0.2
+"循环速度" = 0.25
 "圆滑度" = 1.0
 "菜单文字位置" = Vector2(4, 420)
 "剧情移动目标位置" = Vector2(320, 180)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1075416988]
+layer = 0
+
+[node name="方框" parent="CanvasLayer" unique_id=669023556 instance=ExtResource("5_3qbgb")]

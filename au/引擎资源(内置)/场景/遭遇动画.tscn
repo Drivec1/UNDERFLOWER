@@ -5,10 +5,68 @@
 [ext_resource type="AudioStream" uid="uid://cnsyuycxkiyql" path="res://资源(导入)/音频/音效/遭遇/Noise.wav" id="3_o4cb8"]
 [ext_resource type="Texture2D" uid="uid://ejo8xs3fkhnl" path="res://资源(导入)/贴图/感叹号.png" id="4_s6l6y"]
 
+[sub_resource type="Animation" id="Animation_1ml6i"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("动画控制器/灵魂:visible")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [true]
+}
+
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_ivmpa"]
 _data = {
+&"RESET": SubResource("Animation_1ml6i"),
 &"遭遇": ExtResource("1_xh1l1")
 }
+
+[sub_resource type="GDScript" id="GDScript_xh1l1"]
+resource_name = "跳转"
+script/source = "extends AnimationPlayer
+## ============================================================
+##  动画播放完毕 → 跳转场景
+## ============================================================
+##  用法：
+##    1. 把脚本挂到 AnimationPlayer 节点上
+##    2. 在检查器里填写「目标场景路径」和「要监听的动画名」
+##    3. 动画播完就会自动跳转
+## ============================================================
+
+@export_group(\"跳转设置\")
+## 要跳转到的场景路径，比如 \"res://场景/主菜单.tscn\"
+@export_file(\"*.tscn\") var 目标场景路径: String = \"\"
+## 要监听的动画名（留空 = 监听所有动画）
+@export var 监听的动画名: String = \"\"
+## 播放结束后多久再跳（秒），0 = 立刻跳
+@export var 延迟秒数: float = 0.0
+
+
+func _ready() -> void:
+	# 连接\"动画播放结束\"信号
+	animation_finished.connect(_动画播放完毕)
+
+
+func _动画播放完毕(动画名: StringName) -> void:
+	# 如果指定了监听某个动画，但播的不是它 → 忽略
+	if 监听的动画名 != \"\" and String(动画名) != 监听的动画名:
+		return
+
+	# 检查场景路径是否有效
+	if 目标场景路径 == \"\" or not ResourceLoader.exists(目标场景路径):
+		return
+
+	# 需要延迟就延迟，不需要就立刻跳
+	if 延迟秒数 > 0.0:
+		await get_tree().create_timer(延迟秒数).timeout
+
+	get_tree().change_scene_to_file(目标场景路径)
+"
 
 [node name="遭遇动画" type="Control" unique_id=267576962]
 layout_mode = 3
@@ -21,14 +79,17 @@ grow_vertical = 2
 [node name="动画控制器" type="AnimationPlayer" parent="." unique_id=637960035]
 libraries/ = SubResource("AnimationLibrary_ivmpa")
 autoplay = &"遭遇"
+script = SubResource("GDScript_xh1l1")
+"目标场景路径" = "uid://dh6sj1nnrmimr"
+"监听的动画名" = "遭遇"
 
 [node name="灵魂" type="TextureRect" parent="动画控制器" unique_id=1418289289]
 texture_filter = 3
 offset_left = 16.0
 offset_top = 419.0
 offset_right = 56.0
-offset_bottom = 459.00034
-scale = Vector2(0.64000016, 0.64000016)
+offset_bottom = 459.0003
+scale = Vector2(0.375, 0.375)
 texture = ExtResource("2_1ml6i")
 
 [node name="声音播放器" type="AudioStreamPlayer" parent="动画控制器/灵魂" unique_id=472308369]

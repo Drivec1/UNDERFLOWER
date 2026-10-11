@@ -1,23 +1,521 @@
 [gd_scene format=3 uid="uid://dh6sj1nnrmimr"]
 
-[ext_resource type="Texture2D" uid="uid://b6k7l220yielc" path="res://资源(导入)/贴图/逐梦/附件/自定义.png" id="1_j2q8x"]
-[ext_resource type="Texture2D" uid="uid://cafmysbx6h40f" path="res://资源(导入)/贴图/逐梦/附件/右手.png" id="2_112p8"]
+[ext_resource type="Texture2D" uid="uid://bddfwn3vtck5c" path="res://资源(导入)/贴图/心/正常.png" id="1_sy5k4"]
 
-[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_ubxb5"]
+[sub_resource type="GDScript" id="GDScript_1pwje"]
+resource_name = "主角框"
+script/source = "extends Node2D
+## ============================================================
+##  主角系统 · 纯脚本版（曲线绘制，无着色器）
+## ============================================================
 
-[sub_resource type="SpriteFrames" id="SpriteFrames_auy2n"]
+@export_group(\"角色设置\")
+@export var 角色贴图: Texture2D
+@export var 角色移动速度: float = 200.0
+@export var 角色初始偏移: Vector2 = Vector2.ZERO
 
-[node name="Node" type="Node" unique_id=83611381]
+@export_group(\"方框设置 · 单位 = 像素格\")
+@export var 方框尺寸: Vector2i = Vector2i(138, 46)
+@export_range(1, 64, 1) var 边框厚度: int = 2
+@export_range(0, 64, 1) var 圆角半径: int = 4
+@export_range(1.0, 32.0, 0.5) var 像素格大小: float = 4.0
+@export var 居中显示: bool = true
+@export_range(24, 256, 8) var 轮廓精度: int = 128
 
-[node name="Sprite2D" type="Sprite2D" parent="." unique_id=639983543]
-position = Vector2(198, 320)
-texture = ExtResource("1_j2q8x")
+@export_group(\"方框形状\")
+@export_enum(\"矩形\", \"圆形\") var 形状类型: int = 0
+@export var 圆形半径: float = -1.0
+@export var 变形时间: float = 0.5
 
-[node name="Sprite2D" type="Sprite2D" parent="Sprite2D" unique_id=996102689]
-texture = ExtResource("2_112p8")
+var 方框实例: 方框 = null
+var 角色实例: 角色 = null
 
-[node name="Sprite2D2" type="Sprite2D" parent="Sprite2D" unique_id=897687955]
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="Sprite2D" unique_id=1564138666]
-material = SubResource("CanvasItemMaterial_ubxb5")
-sprite_frames = SubResource("SpriteFrames_auy2n")
+func _ready() -> void:
+	方框实例 = 方框.new()
+	方框实例.方框尺寸 = 方框尺寸
+	方框实例.边框厚度 = 边框厚度
+	方框实例.圆角半径 = 圆角半径
+	方框实例.像素格大小 = 像素格大小
+	方框实例.居中显示 = 居中显示
+	方框实例.圆形半径 = 圆形半径
+	方框实例.轮廓精度 = 轮廓精度
+	方框实例._形状混合 = 1.0 if 形状类型 == 1 else 0.0
+	add_child(方框实例)
+
+	角色实例 = 角色.new()
+	角色实例.texture = 角色贴图
+	角色实例.移动速度 = 角色移动速度
+	角色实例.所属方框 = 方框实例
+	角色实例.position = 方框实例.获取本地中心() + 角色初始偏移
+	add_child(角色实例)
+
+
+func 变形为圆形(时间: float = -1.0) -> void:
+	if 方框实例 != null:
+		方框实例.变形为(方框.形状.圆形, 时间 if 时间 >= 0 else 变形时间)
+
+func 变形为矩形(时间: float = -1.0) -> void:
+	if 方框实例 != null:
+		方框实例.变形为(方框.形状.矩形, 时间 if 时间 >= 0 else 变形时间)
+
+func 移动(x: float, y: float, 时间: float = 1.0) -> void:
+	if 方框实例 == null: return
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(方框实例, \"position\", Vector2(x, y), 时间)
+
+func 瞬移(x: float, y: float) -> void:
+	if 方框实例 != null:
+		方框实例.position = Vector2(x, y)
+
+
+# ============================================================
+#  内部类：方框（等弧长采样 + 逐段填充）
+# ============================================================
+class 方框 extends Node2D:
+	enum 形状 { 矩形, 圆形 }
+
+	var 方框尺寸: Vector2i = Vector2i(138, 46)
+	var 边框厚度: int = 2
+	var 圆角半径: int = 4
+	var 像素格大小: float = 4.0
+	var 居中显示: bool = true
+	var 圆形半径: float = -1.0
+	var 轮廓精度: int = 128
+
+	var _形状混合: float = 0.0:
+		set(v):
+			_形状混合 = v
+			queue_redraw()
+
+	func _ready() -> void:
+		queue_redraw()
+
+
+	func 变形为(目标形状: 形状, 时间: float) -> void:
+		var 目标值: float = 1.0 if 目标形状 == 形状.圆形 else 0.0
+		if is_equal_approx(_形状混合, 目标值):
+			return
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_property(self, \"_形状混合\", 目标值, 时间)
+
+
+	# ==================== 绘制 ====================
+
+	func _draw() -> void:
+		var N := maxi(轮廓精度, 24)
+
+		var 外点 := _采样轮廓(N, true)
+		var 有内轮廓 := _内半().x > 0.0 and _内半().y > 0.0
+
+		if not 有内轮廓:
+			draw_colored_polygon(外点, Color.WHITE)
+			return
+
+		var 内点 := _采样轮廓(N, false)
+
+		for i in N:
+			var i2 := (i + 1) % N
+			var 四边形 := PackedVector2Array([
+				外点[i],
+				外点[i2],
+				内点[i2],
+				内点[i],
+			])
+			draw_colored_polygon(四边形, Color.WHITE)
+
+
+	## 沿轮廓等弧长采样 N 个点
+	func _采样轮廓(N: int, 外: bool) -> PackedVector2Array:
+		var 点 := PackedVector2Array()
+		点.resize(N)
+
+		var 半 := _外半() if 外 else _内半()
+		var r := _外圆角() if 外 else _内圆角()
+		var 椭圆轴 := _外椭圆轴() if 外 else _内椭圆轴()
+		var 混合 := _形状混合
+
+		for i in N:
+			var t := float(i) / float(N)
+			var 矩形点 := _圆角矩形轮廓点(t, 半, r)
+			var 椭圆点 := _椭圆轮廓点(t, 椭圆轴)
+			点[i] = 矩形点.lerp(椭圆点, 混合)
+
+		return 点
+
+
+	## 圆角矩形轮廓上参数 t 处的点（等弧长参数化）
+	## t = 0 在上边中点，顺时针绕一圈
+	func _圆角矩形轮廓点(t: float, 半: Vector2, r: float) -> Vector2:
+		r = minf(r, minf(半.x, 半.y))
+		var 直线横 := maxf(半.x - r, 0.0)
+		var 直线纵 := maxf(2.0 * 半.y - 2.0 * r, 0.0)
+		var 弧长 := PI * r * 0.5
+		var 总长 := 4.0 * 直线横 + 2.0 * 直线纵 + 4.0 * 弧长
+
+		if 总长 < 0.0001:
+			return Vector2(0.0, -半.y)
+
+		var p := fposmod(t, 1.0) * 总长
+
+		# 1. 上边右半段
+		if p < 直线横:
+			return Vector2(p, -半.y)
+		p -= 直线横
+
+		# 2. 右上弧
+		if p < 弧长:
+			var a := -PI * 0.5 + (p / 弧长) * PI * 0.5
+			return Vector2(半.x - r + cos(a) * r, -半.y + r + sin(a) * r)
+		p -= 弧长
+
+		# 3. 右边
+		if p < 直线纵:
+			return Vector2(半.x, -半.y + r + p)
+		p -= 直线纵
+
+		# 4. 右下弧
+		if p < 弧长:
+			var a := (p / 弧长) * PI * 0.5
+			return Vector2(半.x - r + cos(a) * r, 半.y - r + sin(a) * r)
+		p -= 弧长
+
+		# 5. 下边右半段
+		if p < 直线横:
+			return Vector2(半.x - r - p, 半.y)
+		p -= 直线横
+
+		# 6. 下边左半段
+		if p < 直线横:
+			return Vector2(-p, 半.y)
+		p -= 直线横
+
+		# 7. 左下弧
+		if p < 弧长:
+			var a := PI * 0.5 + (p / 弧长) * PI * 0.5
+			return Vector2(-半.x + r + cos(a) * r, 半.y - r + sin(a) * r)
+		p -= 弧长
+
+		# 8. 左边
+		if p < 直线纵:
+			return Vector2(-半.x, 半.y - r - p)
+		p -= 直线纵
+
+		# 9. 左上弧
+		if p < 弧长:
+			var a := PI + (p / 弧长) * PI * 0.5
+			return Vector2(-半.x + r + cos(a) * r, -半.y + r + sin(a) * r)
+		p -= 弧长
+
+		# 10. 上边左半段
+		return Vector2(-半.x + r + p, -半.y)
+
+
+	## 椭圆轮廓上参数 t 处的点（t = 0 在顶部，顺时针）
+	func _椭圆轮廓点(t: float, 轴: Vector2) -> Vector2:
+		var θ := -PI * 0.5 + fposmod(t, 1.0) * TAU
+		return Vector2(cos(θ) * 轴.x, sin(θ) * 轴.y)
+
+
+	# ==================== 几何辅助 ====================
+
+	func _外半() -> Vector2:
+		return Vector2(方框尺寸) * 像素格大小 * 0.5
+
+	func _内半() -> Vector2:
+		var 边 = float(边框厚度) * 像素格大小
+		return _外半() - Vector2(边, 边)
+
+	func _外椭圆轴() -> Vector2:
+		if 圆形半径 < 0.0:
+			return _外半()
+		else:
+			var r: float = 圆形半径 * 像素格大小
+			return Vector2(r, r)
+
+	func _内椭圆轴() -> Vector2:
+		var 边 = float(边框厚度) * 像素格大小
+		var 外轴 := _外椭圆轴()
+		return Vector2(maxf(外轴.x - 边, 0.1), maxf(外轴.y - 边, 0.1))
+
+	func _外圆角() -> float:
+		return minf(float(圆角半径) * 像素格大小, minf(_外半().x, _外半().y))
+
+	func _内圆角() -> float:
+		return maxf(_外圆角() - float(边框厚度) * 像素格大小, 0.0)
+
+
+	# ==================== SDF（给角色碰撞用） ====================
+
+	static func _椭圆距离(p: Vector2, ab: Vector2) -> float:
+		var k1 := (p / ab).length()
+		if k1 < 0.000001:
+			return -minf(ab.x, ab.y)
+		var k2 := (p / (ab * ab)).length()
+		return k1 * (k1 - 1.0) / k2
+
+	func _混合SDF(p: Vector2, 外: bool) -> float:
+		var 矩形SDF: float
+		var 椭圆SDF: float
+
+		if 外:
+			矩形SDF = _圆角矩形距离(p, _外半(), _外圆角())
+			椭圆SDF = _椭圆距离(p, _外椭圆轴())
+		else:
+			var 半 := _内半()
+			if 半.x <= 0.0 or 半.y <= 0.0:
+				return 999999.0
+			矩形SDF = _圆角矩形距离(p, 半, _内圆角())
+			椭圆SDF = _椭圆距离(p, _内椭圆轴())
+
+		return lerpf(矩形SDF, 椭圆SDF, _形状混合)
+
+
+	func 本地点在形状内(本地点: Vector2, 内缩: Vector2 = Vector2.ZERO) -> bool:
+		var sdf := _混合SDF(本地点, false)
+		var 内缩量: float = maxf(内缩.x, 内缩.y)
+		return sdf <= -内缩量
+
+	func 本地推回形状内(本地点: Vector2, 内缩: Vector2 = Vector2.ZERO) -> Vector2:
+		var 内缩量: float = maxf(内缩.x, 内缩.y)
+		for i in 20:
+			var sdf := _混合SDF(本地点, false)
+			if sdf <= -内缩量:
+				return 本地点
+			var eps := 0.5
+			var dx := _混合SDF(本地点 + Vector2(eps, 0), false) - sdf
+			var dy := _混合SDF(本地点 + Vector2(0, eps), false) - sdf
+			var 梯度 := Vector2(dx, dy)
+			if 梯度.length() < 0.0001:
+				本地点 *= 0.5
+			else:
+				梯度 = 梯度.normalized()
+				本地点 -= 梯度 * (sdf + 内缩量)
+		return 本地点
+
+	func 点在形状内(世界点: Vector2, 内缩: Vector2 = Vector2.ZERO) -> bool:
+		var 中心世界 := to_global(获取本地中心())
+		return 本地点在形状内(世界点 - 中心世界, 内缩)
+
+	func 推回形状内(世界点: Vector2, 内缩: Vector2 = Vector2.ZERO) -> Vector2:
+		var 中心世界 := to_global(获取本地中心())
+		var 新本地 := 本地推回形状内(世界点 - 中心世界, 内缩)
+		return 中心世界 + 新本地
+
+
+	# ==================== 中心/边界 ====================
+
+	func 获取本地中心() -> Vector2:
+		if 居中显示:
+			return Vector2.ZERO
+		else:
+			return Vector2(方框尺寸) * 像素格大小 * 0.5
+
+	func 获取边界矩形() -> Rect2:
+		var 局部尺寸 := Vector2(方框尺寸) * 像素格大小
+		var 局部左上 := Vector2.ZERO
+		if 居中显示:
+			局部左上 = -局部尺寸 * 0.5
+		var 全局左上 := to_global(局部左上)
+		var 全局右下 := to_global(局部左上 + 局部尺寸)
+		return Rect2(全局左上, 全局右下 - 全局左上)
+
+	func 获取内边界矩形() -> Rect2:
+		var 外尺寸 := Vector2(方框尺寸) * 像素格大小
+		var 边框像素 := float(边框厚度) * 像素格大小
+		var 内尺寸 := 外尺寸 - Vector2(边框像素, 边框像素) * 2.0
+		var 局部左上 := Vector2(边框像素, 边框像素)
+		if 居中显示:
+			局部左上 = -内尺寸 * 0.5
+		var 全局左上 := to_global(局部左上)
+		var 全局右下 := to_global(局部左上 + 内尺寸)
+		return Rect2(全局左上, 全局右下 - 全局左上)
+
+
+	# ==================== 工具 ====================
+
+	static func _圆角矩形距离(p: Vector2, half: Vector2, r: float) -> float:
+		var q := Vector2(absf(p.x) - half.x + r, absf(p.y) - half.y + r)
+		var outside := Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length()
+		var inside := minf(maxf(q.x, q.y), 0.0)
+		return outside + inside - r
+
+
+# ============================================================
+#  内部类：角色
+# ============================================================
+class 角色 extends Sprite2D:
+	var 移动速度: float = 200.0
+	var 所属方框: Node2D = null
+
+	var _水平栈: Array[String] = []
+	var _垂直栈: Array[String] = []
+
+	var _方框上帧位置: Vector2 = Vector2.ZERO
+	var _方框位置已初始化: bool = false
+
+
+	func _ready() -> void:
+		set_process_input(true)
+
+
+	func _input(event: InputEvent) -> void:
+		for 动作 in [\"left\", \"right\"]:
+			if event.is_action_pressed(动作):
+				_水平栈.erase(动作)
+				_水平栈.append(动作)
+			elif event.is_action_released(动作):
+				_水平栈.erase(动作)
+		for 动作 in [\"up\", \"down\"]:
+			if event.is_action_pressed(动作):
+				_垂直栈.erase(动作)
+				_垂直栈.append(动作)
+			elif event.is_action_released(动作):
+				_垂直栈.erase(动作)
+
+
+	func _process(delta: float) -> void:
+		_同步方框位移()
+		_检查被形状挤出()
+
+		var x方向: float = 0.0
+		var y方向: float = 0.0
+		if _水平栈.size() > 0:
+			x方向 = -1.0 if _水平栈[-1] == \"left\" else 1.0
+		if _垂直栈.size() > 0:
+			y方向 = -1.0 if _垂直栈[-1] == \"up\" else 1.0
+
+		var 方向 := Vector2(x方向, y方向)
+		if 方向 != Vector2.ZERO:
+			_尝试移动(方向.normalized() * 移动速度 * delta)
+
+
+	func _同步方框位移() -> void:
+		if 所属方框 == null:
+			return
+		var 当前位置: Vector2 = 所属方框.global_position
+		if not _方框位置已初始化:
+			_方框上帧位置 = 当前位置
+			_方框位置已初始化 = true
+			return
+		var 位移: Vector2 = 当前位置 - _方框上帧位置
+		if 位移 != Vector2.ZERO:
+			global_position += 位移
+			_方框上帧位置 = 当前位置
+
+
+	func _检查被形状挤出() -> void:
+		if 所属方框 == null:
+			return
+		if not 所属方框.has_method(\"本地点在形状内\"):
+			return
+		if 全局变量.当前回合 == 0:
+			return
+
+		var 半尺寸 := Vector2.ZERO
+		if texture != null:
+			半尺寸 = texture.get_size() * 0.5 * scale
+
+		var 中心世界: Vector2 = 所属方框.to_global(所属方框.获取本地中心())
+		var 本地点: Vector2 = global_position - 中心世界
+
+		if 所属方框.本地点在形状内(本地点, 半尺寸):
+			return
+
+		var 新本地点: Vector2 = 所属方框.本地推回形状内(本地点, 半尺寸)
+		global_position = 中心世界 + 新本地点
+
+
+	# ========================================================
+	#  移动：直接走 → 分轴走 → 圆形切线滑动
+	# ========================================================
+	func _尝试移动(位移: Vector2) -> void:
+		if 全局变量.当前回合 == 0 or 所属方框 == null:
+			global_position += 位移
+			return
+
+		# ① 直接走
+		var 新位置 := global_position + 位移
+		if _位置合法(新位置):
+			global_position = 新位置
+			return
+
+		# ② 分轴走
+		var 动过 := false
+		if 位移.x != 0.0:
+			var 新X := global_position + Vector2(位移.x, 0)
+			if _位置合法(新X):
+				global_position.x = 新X.x
+				动过 = true
+		if 位移.y != 0.0:
+			var 新Y := global_position + Vector2(0, 位移.y)
+			if _位置合法(新Y):
+				global_position.y = 新Y.y
+				动过 = true
+		if 动过:
+			return
+
+		# ③ 只有圆形形态才做切线滑动
+		if _所属方框是圆形():
+			_尝试沿边滑动(位移)
+
+
+	func _所属方框是圆形() -> bool:
+		if 所属方框 == null:
+			return false
+		if not \"_形状混合\" in 所属方框:
+			return false
+		return 所属方框._形状混合 > 0.5
+
+
+	func _尝试沿边滑动(位移: Vector2) -> void:
+		if 位移.length() < 0.001:
+			return
+
+		var 中心世界: Vector2 = 所属方框.to_global(所属方框.获取本地中心())
+		var 本地位置: Vector2 = global_position - 中心世界
+
+		if 本地位置.length() < 0.001:
+			return
+
+		var 半径方向 := 本地位置.normalized()
+		var 切线方向 := Vector2(-半径方向.y, 半径方向.x)
+
+		var 投影: float = 位移.dot(切线方向)
+		if absf(投影) < 0.001:
+			切线方向 = -切线方向
+			投影 = 位移.dot(切线方向)
+			if absf(投影) < 0.001:
+				return
+
+		var 滑动位移 := 切线方向 * 投影
+
+		var 新位置 := global_position + 滑动位移
+		if _位置合法(新位置):
+			global_position = 新位置
+			return
+
+		var 向心 := -半径方向 * 0.5
+		var 贴合位置 := global_position + 滑动位移 + 向心
+		if _位置合法(贴合位置):
+			global_position = 贴合位置
+
+
+	func _位置合法(测试位置: Vector2) -> bool:
+		if 所属方框 == null or not 所属方框.has_method(\"本地点在形状内\"):
+			return true
+		var 半尺寸 := Vector2.ZERO
+		if texture != null:
+			半尺寸 = texture.get_size() * 0.5 * scale
+		var 中心世界: Vector2 = 所属方框.to_global(所属方框.获取本地中心())
+		var 本地点: Vector2 = 测试位置 - 中心世界
+		return 所属方框.本地点在形状内(本地点, 半尺寸)
+"
+
+[node name="方框" type="Node2D" unique_id=669023556]
+position = Vector2(320, 240)
+script = SubResource("GDScript_1pwje")
+"角色贴图" = ExtResource("1_sy5k4")
+"圆形半径" = 40.775
