@@ -17,7 +17,8 @@ run/main_scene="uid://delftjy7lw0y6"
 config/features=PackedStringArray("4.7", "Mobile")
 run/max_fps=120
 boot_splash/show_image=false
-config/icon="uid://ccgeky6efu2m"
+config/icon="uid://caooqpv7g1lgu"
+config/windows_native_icon="res://资源(导入)/贴图/图标.ico"
 
 [audio]
 

@@ -1,12 +1,25 @@
 [gd_scene format=3 uid="uid://dh6sj1nnrmimr"]
 
 [ext_resource type="Texture2D" uid="uid://bddfwn3vtck5c" path="res://资源(导入)/贴图/心/正常.png" id="1_sy5k4"]
+[ext_resource type="Texture2D" uid="uid://0usg2dhbm3os" path="res://资源(导入)/贴图/按钮/行动/ACT 0.png" id="2_bss38"]
+[ext_resource type="FontFile" uid="uid://cd660odo3b142" path="res://资源(导入)/字体/CryptOfTomorrow.ttf" id="2_tda05"]
+[ext_resource type="Texture2D" uid="uid://bw3s71whtseba" path="res://资源(导入)/贴图/按钮/物品/ITEM 0.png" id="3_tda05"]
+[ext_resource type="Texture2D" uid="uid://b33ia0d5e4gc4" path="res://资源(导入)/贴图/按钮/攻击/FIGHT 0.png" id="4_qn3nj"]
+[ext_resource type="Texture2D" uid="uid://cahwd0ly3em6m" path="res://资源(导入)/贴图/按钮/仁慈/MERCY 0.png" id="5_l6pdb"]
 
 [sub_resource type="GDScript" id="GDScript_1pwje"]
 resource_name = "主角框"
 script/source = "extends Node2D
 ## ============================================================
 ##  主角系统 · 纯脚本版（曲线绘制，无着色器）
+## ------------------------------------------------------------
+##  改动说明：
+##  1. 主角不再自己读取键盘输入，移动完全由「其他角色/系统」
+##     调用指令接口来驱动（命令角色移动 / 命令角色移动一步 / 命令角色停止）
+##  2. 主角不再被方框「拖着走」。方框移动时主角原地不动；
+##     只有主角被方框边缘挤到时，才会被推回框内（表现为跟着框走），
+##     而这时主角依然可以自己移动（因为指令接口仍然生效）。
+##  3. 主角在框内部、没碰到边缘时，方框怎么动都不会影响它。
 ## ============================================================
 
 @export_group(\"角色设置\")
@@ -26,6 +39,11 @@ script/source = "extends Node2D
 @export_enum(\"矩形\", \"圆形\") var 形状类型: int = 0
 @export var 圆形半径: float = -1.0
 @export var 变形时间: float = 0.5
+
+@export_group(\"调试\")
+## 勾上就默认显示；运行时按下面的按键可以随时开关
+@export var 显示碰撞体积: bool = false
+@export var 碰撞体积切换按键: Key = KEY_0
 
 var 方框实例: 方框 = null
 var 角色实例: 角色 = null
@@ -50,6 +68,58 @@ func _ready() -> void:
 	角色实例.position = 方框实例.获取本地中心() + 角色初始偏移
 	add_child(角色实例)
 
+	# 告诉方框「角色有多大」，这样才能画出角色中心的可活动区域
+	if 角色贴图 != null:
+		方框实例.调试内缩 = 角色贴图.get_size() * 0.5 * 角色实例.scale
+
+	# 同步一次初始状态
+	设置碰撞体积显示(显示碰撞体积)
+
+
+## 按下 0 键切换碰撞体积显示
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var 键 := event as InputEventKey
+		if 键.pressed and not 键.echo and 键.keycode == 碰撞体积切换按键:
+			设置碰撞体积显示(not 显示碰撞体积)
+			get_viewport().set_input_as_handled()
+
+
+func 设置碰撞体积显示(开: bool) -> void:
+	显示碰撞体积 = 开
+	if 方框实例 != null:
+		方框实例.显示碰撞体积 = 开
+	if 角色实例 != null:
+		角色实例.设置碰撞体积显示(开)
+
+
+# ============================================================
+#  对外指令接口（给「其他角色 / 系统」调用）
+# ============================================================
+
+## 让主角朝某方向持续移动。
+## 方向长度会被限制在 1 以内（Vector2.ZERO 表示停下）。
+## 调用一次后就会一直生效，直到再次调用或调用 命令角色停止()。
+func 命令角色移动(方向: Vector2) -> void:
+	if 角色实例 != null:
+		角色实例.命令移动(方向)
+
+
+## 让主角立刻停下
+func 命令角色停止() -> void:
+	if 角色实例 != null:
+		角色实例.停止移动()
+
+
+## 让主角朝某方向位移一段距离（一次性，不受速度/帧率影响）
+func 命令角色移动一步(方向: Vector2, 距离: float) -> void:
+	if 角色实例 != null:
+		角色实例.命令移动一步(方向, 距离)
+
+
+# ============================================================
+#  方框变形 / 移动控制
+# ============================================================
 
 func 变形为圆形(时间: float = -1.0) -> void:
 	if 方框实例 != null:
@@ -89,6 +159,19 @@ class 方框 extends Node2D:
 			_形状混合 = v
 			queue_redraw()
 
+	# ---------- 调试用 ----------
+	var 显示碰撞体积: bool = false:
+		set(v):
+			显示碰撞体积 = v
+			queue_redraw()
+
+	## 角色碰撞半尺寸：用来画出「角色中心能走到的范围」
+	var 调试内缩: Vector2 = Vector2.ZERO:
+		set(v):
+			调试内缩 = v
+			queue_redraw()
+
+
 	func _ready() -> void:
 		queue_redraw()
 
@@ -112,6 +195,7 @@ class 方框 extends Node2D:
 
 		if not 有内轮廓:
 			draw_colored_polygon(外点, Color.WHITE)
+			_绘制碰撞体积调试(外点, PackedVector2Array())
 			return
 
 		var 内点 := _采样轮廓(N, false)
@@ -126,15 +210,56 @@ class 方框 extends Node2D:
 			])
 			draw_colored_polygon(四边形, Color.WHITE)
 
+		_绘制碰撞体积调试(外点, 内点)
+
+
+	## 调试可视化：外轮廓 / 内轮廓 / 角色中心可活动区域
+	func _绘制碰撞体积调试(外点: PackedVector2Array, 内点: PackedVector2Array) -> void:
+		if not 显示碰撞体积:
+			return
+
+		# ① 外轮廓（黄）
+		if 外点.size() >= 2:
+			draw_polyline(_闭合(外点), Color(1.0, 0.85, 0.2, 0.9), 1.0)
+
+		# ② 内轮廓 = 边框内沿（青）
+		if 内点.size() >= 2:
+			draw_polyline(_闭合(内点), Color(0.25, 0.9, 1.0, 0.9), 1.0)
+
+		# ③ 角色中心可活动范围 = 内轮廓再内缩角色半尺寸（品红）
+		if 调试内缩.x > 0.0 or 调试内缩.y > 0.0:
+			var 有效点 := _采样轮廓(外点.size(), false, 调试内缩)
+			if 有效点.size() >= 2:
+				draw_polyline(_闭合(有效点), Color(1.0, 0.3, 0.6, 0.95), 1.0)
+
+		# ④ 形状中心（小十字）
+		var 中心 := 获取本地中心()
+		draw_line(中心 + Vector2(-5, 0), 中心 + Vector2(5, 0), Color(1, 1, 1, 0.6), 1.0)
+		draw_line(中心 + Vector2(0, -5), 中心 + Vector2(0, 5), Color(1, 1, 1, 0.6), 1.0)
+
+
+	static func _闭合(点: PackedVector2Array) -> PackedVector2Array:
+		var 结果 := 点.duplicate()
+		if 结果.size() > 0:
+			结果.append(结果[0])
+		return 结果
+
 
 	## 沿轮廓等弧长采样 N 个点
-	func _采样轮廓(N: int, 外: bool) -> PackedVector2Array:
+	## 内缩：把整个轮廓向内推 内缩 距离（用于画角色可活动区）
+	func _采样轮廓(N: int, 外: bool, 内缩: Vector2 = Vector2.ZERO) -> PackedVector2Array:
 		var 点 := PackedVector2Array()
 		点.resize(N)
 
-		var 半 := _外半() if 外 else _内半()
-		var r := _外圆角() if 外 else _内圆角()
-		var 椭圆轴 := _外椭圆轴() if 外 else _内椭圆轴()
+		var 半 := (_外半() if 外 else _内半()) - 内缩
+		半 = Vector2(maxf(半.x, 0.0), maxf(半.y, 0.0))
+
+		var r := (_外圆角() if 外 else _内圆角()) - maxf(内缩.x, 内缩.y)
+		r = maxf(r, 0.0)
+
+		var 椭圆轴 := (_外椭圆轴() if 外 else _内椭圆轴()) - 内缩
+		椭圆轴 = Vector2(maxf(椭圆轴.x, 0.0), maxf(椭圆轴.y, 0.0))
+
 		var 混合 := _形状混合
 
 		for i in N:
@@ -344,69 +469,92 @@ class 方框 extends Node2D:
 
 
 # ============================================================
+#  内部类：角色调试绘制层
+#  挂在角色下面当子节点，专门负责画角色的碰撞盒
+# ============================================================
+class 调试图层 extends Node2D:
+	var 启用: bool = false:
+		set(v):
+			启用 = v
+			queue_redraw()
+			set_process(v)
+
+	var 宿主: Node2D = null
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		if not 启用 or 宿主 == null:
+			return
+		宿主._绘制碰撞体积(self)
+
+
+# ============================================================
 #  内部类：角色
 # ============================================================
 class 角色 extends Sprite2D:
 	var 移动速度: float = 200.0
 	var 所属方框: Node2D = null
 
-	var _水平栈: Array[String] = []
-	var _垂直栈: Array[String] = []
+	## 外部指令方向。只由 命令移动()/停止移动() 改写，
+	## 角色自己不会去读键盘。
+	var _指令方向: Vector2 = Vector2.ZERO
 
-	var _方框上帧位置: Vector2 = Vector2.ZERO
-	var _方框位置已初始化: bool = false
+	var _调试图层: 调试图层 = null
 
 
 	func _ready() -> void:
-		set_process_input(true)
+		_调试图层 = 调试图层.new()
+		_调试图层.宿主 = self
+		add_child(_调试图层)
 
 
-	func _input(event: InputEvent) -> void:
-		for 动作 in [\"left\", \"right\"]:
-			if event.is_action_pressed(动作):
-				_水平栈.erase(动作)
-				_水平栈.append(动作)
-			elif event.is_action_released(动作):
-				_水平栈.erase(动作)
-		for 动作 in [\"up\", \"down\"]:
-			if event.is_action_pressed(动作):
-				_垂直栈.erase(动作)
-				_垂直栈.append(动作)
-			elif event.is_action_released(动作):
-				_垂直栈.erase(动作)
+	func 设置碰撞体积显示(开: bool) -> void:
+		if _调试图层 != null:
+			_调试图层.启用 = 开
 
 
+	# ========================================================
+	#  指令接口（其他角色 / 系统调用）
+	# ========================================================
+
+	## 设置持续移动方向。长度会被限制在 1 以内，Vector2.ZERO 表示停下。
+	func 命令移动(方向: Vector2) -> void:
+		_指令方向 = 方向.limit_length(1.0)
+		if _指令方向.length() < 0.001:
+			_指令方向 = Vector2.ZERO
+
+
+	## 立刻停下
+	func 停止移动() -> void:
+		_指令方向 = Vector2.ZERO
+
+
+	## 一次性位移（不受帧率影响）
+	func 命令移动一步(方向: Vector2, 距离: float) -> void:
+		if 方向.length() < 0.001 or is_zero_approx(距离):
+			return
+		_尝试移动(方向.normalized() * 距离)
+
+
+	# ========================================================
+	#  每帧更新
+	# ========================================================
 	func _process(delta: float) -> void:
-		_同步方框位移()
-		_检查被形状挤出()
+		# 先处理「被方框挤出」——只有碰到边缘 / 被框扫到时才会动
+		_被方框边缘挤压时跟随()
 
-		var x方向: float = 0.0
-		var y方向: float = 0.0
-		if _水平栈.size() > 0:
-			x方向 = -1.0 if _水平栈[-1] == \"left\" else 1.0
-		if _垂直栈.size() > 0:
-			y方向 = -1.0 if _垂直栈[-1] == \"up\" else 1.0
-
-		var 方向 := Vector2(x方向, y方向)
-		if 方向 != Vector2.ZERO:
-			_尝试移动(方向.normalized() * 移动速度 * delta)
+		# 再处理自己（由指令驱动）的移动
+		if _指令方向 != Vector2.ZERO:
+			_尝试移动(_指令方向 * 移动速度 * delta)
 
 
-	func _同步方框位移() -> void:
-		if 所属方框 == null:
-			return
-		var 当前位置: Vector2 = 所属方框.global_position
-		if not _方框位置已初始化:
-			_方框上帧位置 = 当前位置
-			_方框位置已初始化 = true
-			return
-		var 位移: Vector2 = 当前位置 - _方框上帧位置
-		if 位移 != Vector2.ZERO:
-			global_position += 位移
-			_方框上帧位置 = 当前位置
-
-
-	func _检查被形状挤出() -> void:
+	## 方框移动时：主角不主动跟随。
+	## 只有当主角被方框边缘「压到」时（即已经跑到形状外 / 碰到边界），
+	## 才把它推回形状内 —— 表现上就是被框推着走。
+	## 主角在框内部且没碰边时，这里什么都不做。
+	func _被方框边缘挤压时跟随() -> void:
 		if 所属方框 == null:
 			return
 		if not 所属方框.has_method(\"本地点在形状内\"):
@@ -421,11 +569,37 @@ class 角色 extends Sprite2D:
 		var 中心世界: Vector2 = 所属方框.to_global(所属方框.获取本地中心())
 		var 本地点: Vector2 = global_position - 中心世界
 
+		# 还在可活动区域内 → 不管方框怎么动，主角都不动
 		if 所属方框.本地点在形状内(本地点, 半尺寸):
 			return
 
+		# 越界了 → 推回最近的合法位置（被框挤着走）
 		var 新本地点: Vector2 = 所属方框.本地推回形状内(本地点, 半尺寸)
 		global_position = 中心世界 + 新本地点
+
+
+	## 角色碰撞盒半尺寸（与 _位置合法 保持一致）
+	func 获取碰撞半尺寸() -> Vector2:
+		if texture == null:
+			return Vector2.ZERO
+		return texture.get_size() * 0.5 * scale
+
+
+	## 供调试图层回调，在角色本地坐标系里画碰撞盒
+	func _绘制碰撞体积(画布: CanvasItem) -> void:
+		var 半 := 获取碰撞半尺寸()
+		if 半 == Vector2.ZERO:
+			半 = Vector2(8.0, 8.0)
+
+		var 矩形 := Rect2(-半, 半 * 2.0)
+
+		# 半透明填充 + 描边
+		画布.draw_rect(矩形, Color(1.0, 0.25, 0.3, 0.15), true)
+		画布.draw_rect(矩形, Color(1.0, 0.25, 0.3, 0.95), false, 1.0)
+
+		# 中心十字
+		画布.draw_line(Vector2(-5, 0), Vector2(5, 0), Color(1.0, 1.0, 0.2, 0.9), 1.0)
+		画布.draw_line(Vector2(0, -5), Vector2(0, 5), Color(1.0, 1.0, 0.2, 0.9), 1.0)
 
 
 	# ========================================================
@@ -519,3 +693,31 @@ position = Vector2(320, 240)
 script = SubResource("GDScript_1pwje")
 "角色贴图" = ExtResource("1_sy5k4")
 "圆形半径" = 40.775
+
+[node name="文本" type="RichTextLabel" parent="." unique_id=382923746]
+offset_left = -294.0
+offset_top = 150.0
+offset_right = 291.0
+offset_bottom = 167.0
+theme_override_fonts/normal_font = ExtResource("2_tda05")
+theme_override_font_sizes/normal_font_size = 27
+text = "play  Frisk      LV19"
+fit_content = true
+scroll_active = false
+metadata/_edit_use_anchors_ = true
+
+[node name="攻击" type="Sprite2D" parent="." unique_id=53022591]
+position = Vector2(-240, 195)
+texture = ExtResource("4_qn3nj")
+
+[node name="行动" type="Sprite2D" parent="." unique_id=438184391]
+position = Vector2(-80, 195)
+texture = ExtResource("2_bss38")
+
+[node name="物品" type="Sprite2D" parent="." unique_id=897847308]
+position = Vector2(80, 195)
+texture = ExtResource("3_tda05")
+
+[node name="仁慈" type="Sprite2D" parent="." unique_id=569926471]
+position = Vector2(240, 195)
+texture = ExtResource("5_l6pdb")
