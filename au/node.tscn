@@ -688,6 +688,12 @@ class 角色 extends Sprite2D:
 		return 所属方框.本地点在形状内(本地点, 半尺寸)
 "
 
+[sub_resource type="GDScript" id="GDScript_o5d88"]
+resource_name = "显示"
+script/source = "extends ColorRect
+	global_position = 全局变量.决心
+"
+
 [node name="方框" type="Node2D" unique_id=669023556]
 position = Vector2(320, 240)
 script = SubResource("GDScript_1pwje")
@@ -696,15 +702,16 @@ script = SubResource("GDScript_1pwje")
 
 [node name="文本" type="RichTextLabel" parent="." unique_id=382923746]
 offset_left = -294.0
-offset_top = 150.0
-offset_right = 291.0
-offset_bottom = 167.0
+offset_top = 151.0
+offset_right = 327.2469
+offset_bottom = 171.10852
+scale = Vector2(0.9448739, 0.9448739)
 theme_override_fonts/normal_font = ExtResource("2_tda05")
 theme_override_font_sizes/normal_font_size = 27
-text = "play  Frisk      LV19"
+bbcode_enabled = true
+text = "play  Frisk  LV19               [color=#FFD700]HP[/color]"
 fit_content = true
 scroll_active = false
-metadata/_edit_use_anchors_ = true
 
 [node name="攻击" type="Sprite2D" parent="." unique_id=53022591]
 position = Vector2(-240, 195)
@@ -721,3 +728,33 @@ texture = ExtResource("3_tda05")
 [node name="仁慈" type="Sprite2D" parent="." unique_id=569926471]
 position = Vector2(240, 195)
 texture = ExtResource("5_l6pdb")
+
+[node name="血条背景" type="ColorRect" parent="." unique_id=412277758]
+offset_left = -2.0
+offset_top = 152.0
+offset_right = 134.0
+offset_bottom = 169.0
+color = Color(0.48235294, 0, 0, 1)
+script = SubResource("GDScript_o5d88")
+
+[node name="复盖层" type="ColorRect" parent="血条背景" unique_id=123070132]
+layout_mode = 0
+offset_right = 136.0
+offset_bottom = 16.55
+color = Color(1, 1, 0, 1)
+
+[node name="框" type="ReferenceRect" parent="血条背景" unique_id=646980045]
+layout_mode = 0
+offset_right = 136.0
+offset_bottom = 17.0
+
+[node name="RichTextLabel" type="RichTextLabel" parent="血条背景" unique_id=1644463847]
+layout_mode = 0
+offset_left = 203.0
+offset_top = -1.0
+offset_right = 359.0
+offset_bottom = 16.0
+theme_override_fonts/normal_font = ExtResource("2_tda05")
+theme_override_font_sizes/normal_font_size = 27
+bbcode_enabled = true
+text = "/92"

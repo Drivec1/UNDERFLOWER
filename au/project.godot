@@ -26,9 +26,10 @@ buses/default_bus_layout=""
 
 [autoload]
 
-F4="*uid://cigm0ysjsek5n"
 "全局变量"="*uid://bvuyqi8t167p5"
+"网页请求"="*uid://qvwhnccpmmjw"
 "打字机"="*uid://cjkns7r88syjm"
+F4="*uid://cigm0ysjsek5n"
 
 [display]
 
