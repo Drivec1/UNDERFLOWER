@@ -216,14 +216,14 @@ func _编码网址(网址: String) -> String:
 	# 原样保留的字符；% 保留是为了不把已经编码好的再编一遍
 	var 保留 := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~/:?&=%,+@!$'()*;[]"
 
-	var 结果 := ""
+	var 新网址 := ""
 	for 字节 in 其余.to_utf8_buffer():
 		var 单字 := char(字节)
 		if 字节 < 128 and 保留.contains(单字):
-			结果 += 单字
+			新网址 += 单字
 		else:
-			结果 += "%%%02X" % 字节
-	return 前缀 + 结果
+			新网址 += "%%%02X" % 字节
+	return 前缀 + 新网址
 
 
 func _收到响应(结果码: int, 状态码: int, _响应头: PackedStringArray, 正文: PackedByteArray,

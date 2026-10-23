@@ -40,11 +40,6 @@ script/source = "extends Node2D
 @export var 圆形半径: float = -1.0
 @export var 变形时间: float = 0.5
 
-@export_group(\"调试\")
-## 勾上就默认显示；运行时按下面的按键可以随时开关
-@export var 显示碰撞体积: bool = false
-@export var 碰撞体积切换按键: Key = KEY_0
-
 var 方框实例: 方框 = null
 var 角色实例: 角色 = null
 
@@ -70,27 +65,7 @@ func _ready() -> void:
 
 	# 告诉方框「角色有多大」，这样才能画出角色中心的可活动区域
 	if 角色贴图 != null:
-		方框实例.调试内缩 = 角色贴图.get_size() * 0.5 * 角色实例.scale
-
-	# 同步一次初始状态
-	设置碰撞体积显示(显示碰撞体积)
-
-
-## 按下 0 键切换碰撞体积显示
-func _input(event: InputEvent) -> void:
-	if event is InputEventKey:
-		var 键 := event as InputEventKey
-		if 键.pressed and not 键.echo and 键.keycode == 碰撞体积切换按键:
-			设置碰撞体积显示(not 显示碰撞体积)
-			get_viewport().set_input_as_handled()
-
-
-func 设置碰撞体积显示(开: bool) -> void:
-	显示碰撞体积 = 开
-	if 方框实例 != null:
-		方框实例.显示碰撞体积 = 开
-	if 角色实例 != null:
-		角色实例.设置碰撞体积显示(开)
+		方框实例.调试内缩 = 角色实例.获取碰撞半尺寸()
 
 
 # ============================================================
@@ -159,12 +134,6 @@ class 方框 extends Node2D:
 			_形状混合 = v
 			queue_redraw()
 
-	# ---------- 调试用 ----------
-	var 显示碰撞体积: bool = false:
-		set(v):
-			显示碰撞体积 = v
-			queue_redraw()
-
 	## 角色碰撞半尺寸：用来画出「角色中心能走到的范围」
 	var 调试内缩: Vector2 = Vector2.ZERO:
 		set(v):
@@ -195,7 +164,6 @@ class 方框 extends Node2D:
 
 		if not 有内轮廓:
 			draw_colored_polygon(外点, Color.WHITE)
-			_绘制碰撞体积调试(外点, PackedVector2Array())
 			return
 
 		var 内点 := _采样轮廓(N, false)
@@ -209,33 +177,6 @@ class 方框 extends Node2D:
 				内点[i],
 			])
 			draw_colored_polygon(四边形, Color.WHITE)
-
-		_绘制碰撞体积调试(外点, 内点)
-
-
-	## 调试可视化：外轮廓 / 内轮廓 / 角色中心可活动区域
-	func _绘制碰撞体积调试(外点: PackedVector2Array, 内点: PackedVector2Array) -> void:
-		if not 显示碰撞体积:
-			return
-
-		# ① 外轮廓（黄）
-		if 外点.size() >= 2:
-			draw_polyline(_闭合(外点), Color(1.0, 0.85, 0.2, 0.9), 1.0)
-
-		# ② 内轮廓 = 边框内沿（青）
-		if 内点.size() >= 2:
-			draw_polyline(_闭合(内点), Color(0.25, 0.9, 1.0, 0.9), 1.0)
-
-		# ③ 角色中心可活动范围 = 内轮廓再内缩角色半尺寸（品红）
-		if 调试内缩.x > 0.0 or 调试内缩.y > 0.0:
-			var 有效点 := _采样轮廓(外点.size(), false, 调试内缩)
-			if 有效点.size() >= 2:
-				draw_polyline(_闭合(有效点), Color(1.0, 0.3, 0.6, 0.95), 1.0)
-
-		# ④ 形状中心（小十字）
-		var 中心 := 获取本地中心()
-		draw_line(中心 + Vector2(-5, 0), 中心 + Vector2(5, 0), Color(1, 1, 1, 0.6), 1.0)
-		draw_line(中心 + Vector2(0, -5), 中心 + Vector2(0, 5), Color(1, 1, 1, 0.6), 1.0)
 
 
 	static func _闭合(点: PackedVector2Array) -> PackedVector2Array:
@@ -469,28 +410,6 @@ class 方框 extends Node2D:
 
 
 # ============================================================
-#  内部类：角色调试绘制层
-#  挂在角色下面当子节点，专门负责画角色的碰撞盒
-# ============================================================
-class 调试图层 extends Node2D:
-	var 启用: bool = false:
-		set(v):
-			启用 = v
-			queue_redraw()
-			set_process(v)
-
-	var 宿主: Node2D = null
-
-	func _process(_delta: float) -> void:
-		queue_redraw()
-
-	func _draw() -> void:
-		if not 启用 or 宿主 == null:
-			return
-		宿主._绘制碰撞体积(self)
-
-
-# ============================================================
 #  内部类：角色
 # ============================================================
 class 角色 extends Sprite2D:
@@ -500,19 +419,6 @@ class 角色 extends Sprite2D:
 	## 外部指令方向。只由 命令移动()/停止移动() 改写，
 	## 角色自己不会去读键盘。
 	var _指令方向: Vector2 = Vector2.ZERO
-
-	var _调试图层: 调试图层 = null
-
-
-	func _ready() -> void:
-		_调试图层 = 调试图层.new()
-		_调试图层.宿主 = self
-		add_child(_调试图层)
-
-
-	func 设置碰撞体积显示(开: bool) -> void:
-		if _调试图层 != null:
-			_调试图层.启用 = 开
 
 
 	# ========================================================
@@ -578,28 +484,20 @@ class 角色 extends Sprite2D:
 		global_position = 中心世界 + 新本地点
 
 
-	## 角色碰撞盒半尺寸（与 _位置合法 保持一致）
+	## 角色碰撞盒在本地坐标系里的真实矩形
+	## 用 CanvasItem.get_rect()：它会自动把 centered / offset / scale 全算进去，
+	## 不像原来那样默认「贴图一定居中」，所以框不会和角色错位。
+	func 获取碰撞矩形() -> Rect2:
+		if texture == null:
+			return Rect2(Vector2(-8, -8), Vector2(16, 16))
+		return get_rect()
+
+
+	## 角色碰撞半尺寸（与 _位置合法 保持一致）
 	func 获取碰撞半尺寸() -> Vector2:
 		if texture == null:
 			return Vector2.ZERO
-		return texture.get_size() * 0.5 * scale
-
-
-	## 供调试图层回调，在角色本地坐标系里画碰撞盒
-	func _绘制碰撞体积(画布: CanvasItem) -> void:
-		var 半 := 获取碰撞半尺寸()
-		if 半 == Vector2.ZERO:
-			半 = Vector2(8.0, 8.0)
-
-		var 矩形 := Rect2(-半, 半 * 2.0)
-
-		# 半透明填充 + 描边
-		画布.draw_rect(矩形, Color(1.0, 0.25, 0.3, 0.15), true)
-		画布.draw_rect(矩形, Color(1.0, 0.25, 0.3, 0.95), false, 1.0)
-
-		# 中心十字
-		画布.draw_line(Vector2(-5, 0), Vector2(5, 0), Color(1.0, 1.0, 0.2, 0.9), 1.0)
-		画布.draw_line(Vector2(0, -5), Vector2(0, 5), Color(1.0, 1.0, 0.2, 0.9), 1.0)
+		return 获取碰撞矩形().size * 0.5
 
 
 	# ========================================================
@@ -690,8 +588,142 @@ class 角色 extends Sprite2D:
 
 [sub_resource type="GDScript" id="GDScript_o5d88"]
 resource_name = "显示"
-script/source = "extends ColorRect
-	global_position = 全局变量.决心
+
+[sub_resource type="GDScript" id="GDScript_ubxb5"]
+script/source = "extends Node
+## ============================================================
+##  主角键盘控制器
+## ------------------------------------------------------------
+##  这个脚本只做一件事：
+##    读 WASD / 方向键  →  翻译成 命令  →  发给主角脚本
+##
+##  主角脚本（那个 方框+角色 的系统）自己已经支持：
+##    命令角色移动(方向)      持续移动
+##    命令角色移动一步(方向,距离)  一次性位移
+##    命令角色停止()          立刻停下
+##  所以这里不需要、也不应该去碰主角的 position。
+##
+##  用法：
+##    1. 把这个脚本挂到场景里任意 Node 上
+##    2. 把「主角节点」拖到检查器的 主角 槽位
+##    3. 运行，按 WASD / 方向键
+## ============================================================
+
+@export_group(\"连接\")
+## 挂着你那个「主角系统」脚本的节点
+@export var 主角节点: Node = null
+
+@export_group(\"操作方式\")
+## 开：持续按住移动（平台跳跃手感）
+## 关：每按一次走一步（回合制 / 地牢手感）
+@export var 持续移动: bool = true
+
+## 「一步」模式下每次走的距离（像素）
+@export var 单步距离: float = 64.0
+
+## 「一步」模式下两次位移之间至少间隔多久（秒），防止连发过快
+@export_range(0.01, 1.0, 0.01) var 单步冷却: float = 0.15
+
+@export_group(\"调试\")
+## 勾上会在输出面板打印每次发出的命令
+@export var 打印命令: bool = false
+
+var _上次单步时间: float = 0.0
+
+## 每个方向最近一次按下的时间（秒）。
+## 同一轴的上下 / 左右互斥时，谁按得晚就听谁的：
+## 先按右再按左，松开右之前一直是左。
+var _按下时间: Dictionary = {}
+
+
+func _ready() -> void:
+	# 清空记录
+	for 动作 in [\"left\", \"right\", \"up\", \"down\"]:
+		_按下时间[动作] = -1.0
+
+	if 主角节点 == null:
+		push_warning(\"主角控制器：没有设置「主角节点」，控制器不会工作。\")
+		return
+	# 检查接口对不对，早报错比晚崩好
+	for 方法 in [\"命令角色移动\", \"命令角色移动一步\", \"命令角色停止\"]:
+		if not 主角节点.has_method(方法):
+			push_error(\"主角控制器：主角节点缺少方法「%s」，请确认挂的是那个主角系统脚本。\" % 方法)
+			return
+
+
+func _process(_delta: float) -> void:
+	if 主角节点 == null:
+		return
+
+	var 方向 := 读取方向()
+
+	if 持续移动:
+		# 持续模式：有方向就一直走，没方向就停
+		if 方向 == Vector2.ZERO:
+			主角节点.命令角色停止()
+		else:
+			主角节点.命令角色移动(方向)
+	else:
+		# 单步模式：只在有方向时走一步，冷却防止连发
+		if 方向 != Vector2.ZERO and _冷却好了():
+			_上次单步时间 = Time.get_ticks_msec() / 1000.0
+			主角节点.命令角色移动一步(方向, 单步距离)
+			if 打印命令:
+				print(\"单步移动：\", 方向)
+
+
+## 读取键盘方向
+## 规则：同一轴的上下互斥、左右互斥，取「最近按下」的那个。
+## 不同轴可以同时生效，所以能走出左上 / 右下 这类斜向。
+func 读取方向() -> Vector2:
+	var 方向 := Vector2.ZERO
+
+	# 左右轴：取最近按下的那一个
+	if Input.is_action_pressed(\"left\") and Input.is_action_pressed(\"right\"):
+		方向.x = -1.0 if _按下时间[\"left\"] > _按下时间[\"right\"] else 1.0
+	elif Input.is_action_pressed(\"left\"):
+		方向.x = -1.0
+	elif Input.is_action_pressed(\"right\"):
+		方向.x = 1.0
+
+	# 上下轴：取最近按下的那一个
+	if Input.is_action_pressed(\"up\") and Input.is_action_pressed(\"down\"):
+		方向.y = -1.0 if _按下时间[\"up\"] > _按下时间[\"down\"] else 1.0
+	elif Input.is_action_pressed(\"up\"):
+		方向.y = -1.0
+	elif Input.is_action_pressed(\"down\"):
+		方向.y = 1.0
+
+	# 归一化：斜向移动不会比直线快 √2 倍
+	return 方向.normalized() if 方向 != Vector2.ZERO else Vector2.ZERO
+
+
+## 记录方向键按下的先后顺序
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey):
+		return
+	var 键 := event as InputEventKey
+	if not 键.pressed or 键.echo:
+		return
+
+	var 动作 := \"\"
+	match 键.keycode:
+		KEY_LEFT, KEY_A:
+			动作 = \"left\"
+		KEY_RIGHT, KEY_D:
+			动作 = \"right\"
+		KEY_UP, KEY_W:
+			动作 = \"up\"
+		KEY_DOWN, KEY_S:
+			动作 = \"down\"
+
+	if 动作 != \"\":
+		_按下时间[动作] = Time.get_ticks_msec() / 1000.0
+
+
+func _冷却好了() -> bool:
+	var 现在 := Time.get_ticks_msec() / 1000.0
+	return 现在 - _上次单步时间 >= 单步冷却
 "
 
 [node name="方框" type="Node2D" unique_id=669023556]
@@ -758,3 +790,8 @@ theme_override_fonts/normal_font = ExtResource("2_tda05")
 theme_override_font_sizes/normal_font_size = 27
 bbcode_enabled = true
 text = "/92"
+
+[node name="Node2D" type="Node2D" parent="." unique_id=2113834951 node_paths=PackedStringArray("主角节点")]
+script = SubResource("GDScript_ubxb5")
+"主角节点" = NodePath("..")
+"单步冷却" = 0.01

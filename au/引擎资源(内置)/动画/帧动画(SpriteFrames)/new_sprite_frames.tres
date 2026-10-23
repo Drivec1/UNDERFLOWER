@@ -12,14 +12,6 @@
 animations = [{
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("1_ruj5k")
-}],
-"loop": 0,
-"name": &"default",
-"speed": 5.0
-}, {
-"frames": [{
-"duration": 1.0,
 "texture": ExtResource("2_o3cqq")
 }, {
 "duration": 1.0,
@@ -64,4 +56,12 @@ animations = [{
 "loop": 0,
 "name": &"摇头",
 "speed": 8.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("1_ruj5k")
+}],
+"loop": 0,
+"name": &"默认",
+"speed": 5.0
 }]

@@ -1,0 +1,285 @@
+[gd_scene format=3 uid="uid://7uhxlta3ye4d"]
+
+[ext_resource type="Texture2D" uid="uid://d0guh8qrqvec6" path="res://资源(导入)/贴图/逐梦/全身.png" id="1_cvoes"]
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_ruj5k"]
+
+[sub_resource type="GDScript" id="GDScript_ubxb5"]
+resource_name = "行动"
+script/source = "@tool
+extends AnimatedSprite2D
+## ============================================================
+##  角色控制器（内置脚本版 + 彩虹残影 + 字典控制）
+##  直接保存在场景中，无需外部文件。
+## ============================================================
+
+@export_group(\"默认图片\")
+@export var 默认图片: Texture2D:
+	set(value):
+		默认图片 = value
+		if is_inside_tree():
+			_刷新图片显示()
+
+@export_group(\"动作时长设置\")
+@export var 移动默认时长: float = 1.0
+@export var 旋转默认时长: float = 1.0
+@export var 缩放默认时长: float = 1.0
+
+@export_group(\"残影设置（默认值）\")
+@export var 启用残影: bool = true
+@export var 残影间隔: float = 0.04
+@export var 残影存活时间: float = 0.6
+@export_range(0.0, 1.0, 0.05) var 残影初始不透明度: float = 0.7
+@export_range(0.3, 1.0, 0.05) var 残影缩小比例: float = 1.0
+@export var 残影颜色: Color = Color(1, 1, 1, 1)
+@export var 残影用彩虹色: bool = true
+@export var 彩虹变化速度: float = 0.667
+@export_range(0.0, 1.0, 0.05) var 彩虹饱和度: float = 0.9
+@export var 残影数量上限: int = 30
+
+# ==================== 内部变量 ====================
+var _原动画帧: SpriteFrames
+var _临时静态帧: SpriteFrames
+var _当前移动Tween: Tween
+var _当前旋转Tween: Tween
+var _当前缩放Tween: Tween
+
+var 残影计时: float = 0.0
+var 彩虹相位: float = 0.0
+var 残影材质: CanvasItemMaterial
+
+# ==================== 信号 ====================
+signal 移动完成
+signal 旋转完成
+signal 缩放完成
+signal 动画播放完毕
+
+# ==================== 生命周期 ====================
+func _ready() -> void:
+	_原动画帧 = sprite_frames
+	if _原动画帧 == null:
+		_原动画帧 = SpriteFrames.new()
+		sprite_frames = _原动画帧
+		
+	if 默认图片 != null:
+		_刷新图片显示()
+	else:
+		if not Engine.is_editor_hint() and sprite_frames and not is_playing():
+			play()
+
+func _exit_tree() -> void:
+	_清理Tween()
+
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint(): return
+	if 启用残影 and 残影间隔 > 0.0:
+		残影计时 += delta
+		while 残影计时 >= 残影间隔:
+			残影计时 -= 残影间隔
+			生成残影()
+
+func _清理Tween() -> void:
+	if _当前移动Tween and _当前移动Tween.is_valid(): _当前移动Tween.kill()
+	if _当前旋转Tween and _当前旋转Tween.is_valid(): _当前旋转Tween.kill()
+	if _当前缩放Tween and _当前缩放Tween.is_valid(): _当前缩放Tween.kill()
+
+# ==================== 统一 API ====================
+func 执行(参数: Dictionary) -> void:
+	if Engine.is_editor_hint(): return
+	if typeof(参数) != TYPE_DICTIONARY: return
+
+	var 动作 = _取字段(参数, [\"动作\", \"action\"], \"\")
+	match str(动作).strip_edges():
+		# ---------- 移动 / 旋转 / 缩放 ----------
+		\"移动\", \"move\":
+			移动(_解析坐标(_取字段(参数, [\"目标\", \"pos\"], global_position)), float(_取字段(参数, [\"时长\", \"time\"], 移动默认时长)))
+		\"停止移动\":
+			停止移动()
+		\"旋转\", \"rotate\":
+			旋转到(float(_取字段(参数, [\"角度\", \"angle\"], 0.0)), float(_取字段(参数, [\"时长\", \"time\"], 旋转默认时长)))
+		\"停止旋转\":
+			停止旋转()
+		\"缩放\", \"scale\":
+			缩放到(_解析坐标(_取字段(参数, [\"目标\", \"scale\"], Vector2.ONE)), float(_取字段(参数, [\"时长\", \"time\"], 缩放默认时长)))
+		\"停止缩放\":
+			停止缩放()
+		# ---------- 图片 / 动画 ----------
+		\"换图\", \"image\":
+			var 图 = _取字段(参数, [\"图片\", \"image\"], null)
+			if typeof(图) == TYPE_STRING: 图 = load(图)
+			if 图 is Texture2D: 更改图片(图)
+		\"播放动画\", \"anim\":
+			播放帧动画(str(_取字段(参数, [\"名字\", \"name\"], \"\")), bool(_取字段(参数, [\"停留\", \"hold\"], true)))
+		\"结束动画\":
+			结束动画帧变回图片()
+		# ---------- 拖尾控制 ----------
+		\"开启拖尾\", \"enable_trail\":
+			启用残影 = true
+		\"关闭拖尾\", \"disable_trail\":
+			启用残影 = false
+			_清理现有残影()
+		\"设置拖尾\", \"set_trail\":
+			_修改拖尾参数(参数)
+
+# ==================== 核心动作 ====================
+func 移动(目标位置: Vector2, 时长: float = -1.0) -> void:
+	if Engine.is_editor_hint(): return
+	if 时长 < 0: 时长 = 移动默认时长
+	_清理Tween()
+	_当前移动Tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_当前移动Tween.tween_property(self, \"global_position\", 目标位置, 时长)
+	_当前移动Tween.finished.connect(func(): 移动完成.emit())
+
+func 停止移动() -> void:
+	if _当前移动Tween and _当前移动Tween.is_valid(): _当前移动Tween.kill()
+
+func 旋转到(目标角度_度: float, 时长: float = -1.0) -> void:
+	if Engine.is_editor_hint(): return
+	if 时长 < 0: 时长 = 旋转默认时长
+	_清理Tween()
+	_当前旋转Tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_当前旋转Tween.tween_property(self, \"rotation\", deg_to_rad(目标角度_度), 时长)
+	_当前旋转Tween.finished.connect(func(): 旋转完成.emit())
+
+func 停止旋转() -> void:
+	if _当前旋转Tween and _当前旋转Tween.is_valid(): _当前旋转Tween.kill()
+
+func 缩放到(目标缩放: Vector2, 时长: float = -1.0) -> void:
+	if Engine.is_editor_hint(): return
+	if 时长 < 0: 时长 = 缩放默认时长
+	_清理Tween()
+	_当前缩放Tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_当前缩放Tween.tween_property(self, \"scale\", 目标缩放, 时长)
+	_当前缩放Tween.finished.connect(func(): 缩放完成.emit())
+
+func 停止缩放() -> void:
+	if _当前缩放Tween and _当前缩放Tween.is_valid(): _当前缩放Tween.kill()
+
+func 更改图片(新图片: Texture2D) -> void:
+	默认图片 = 新图片
+	_刷新图片显示()
+
+func 播放帧动画(动画名: String, 停留最后帧: bool = true) -> void:
+	if Engine.is_editor_hint(): return
+	if _原动画帧 == null or not _原动画帧.has_animation(动画名): return
+	sprite_frames = _原动画帧
+	if 停留最后帧:
+		var 原循环 = _原动画帧.get_animation_loop(动画名)
+		_原动画帧.set_animation_loop(动画名, false)
+		play(动画名)
+		await animation_finished
+		动画播放完毕.emit()
+		if sprite_frames == _原动画帧: _原动画帧.set_animation_loop(动画名, 原循环)
+	else:
+		play(动画名)
+
+func 结束动画帧变回图片() -> void:
+	if Engine.is_editor_hint(): return
+	stop()
+	_刷新图片显示()
+
+# ==================== 拖尾参数修改逻辑 ====================
+func _修改拖尾参数(参数: Dictionary) -> void:
+	if 参数.has(\"间隔\"): 残影间隔 = float(参数[\"间隔\"])
+	if 参数.has(\"存活时间\"): 残影存活时间 = float(参数[\"存活时间\"])
+	if 参数.has(\"初始不透明度\"): 残影初始不透明度 = float(参数[\"初始不透明度\"])
+	if 参数.has(\"缩小比例\"): 残影缩小比例 = float(参数[\"缩小比例\"])
+	if 参数.has(\"彩虹色\"): 残影用彩虹色 = bool(参数[\"彩虹色\"])
+	if 参数.has(\"彩虹速度\"): 彩虹变化速度 = float(参数[\"彩虹速度\"])
+	if 参数.has(\"饱和度\"): 彩虹饱和度 = float(参数[\"饱和度\"])
+	if 参数.has(\"数量上限\"): 残影数量上限 = int(参数[\"数量上限\"])
+	
+	if 参数.has(\"颜色\"):
+		var c = 参数[\"颜色\"]
+		if typeof(c) == TYPE_STRING: c = Color(c)
+		if c is Color: 残影颜色 = c
+
+func _清理现有残影() -> void:
+	if get_tree() == null: return
+	for 幽灵 in get_tree().get_nodes_in_group(\"残影\"):
+		if is_instance_valid(幽灵):
+			幽灵.queue_free()
+
+# ==================== 残影生成逻辑 ====================
+func 生成残影() -> void:
+	if sprite_frames == null: return
+	if get_tree() == null: return
+
+	if get_tree().get_nodes_in_group(\"残影\").size() >= 残影数量上限:
+		return
+
+	var 当前纹理 = sprite_frames.get_frame_texture(animation, frame)
+	if 当前纹理 == null: return
+
+	if 残影材质 == null:
+		残影材质 = CanvasItemMaterial.new()
+		残影材质.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+
+	var 幽灵 := Sprite2D.new()
+	幽灵.texture = 当前纹理
+	幽灵.material = 残影材质
+	幽灵.global_position = global_position
+	幽灵.global_rotation = global_rotation
+	幽灵.scale = scale
+	幽灵.z_index = z_index - 1
+	幽灵.flip_h = flip_h
+	幽灵.flip_v = flip_v
+	幽灵.add_to_group(\"残影\")
+
+	if 残影用彩虹色:
+		彩虹相位 = fmod(彩虹相位 + 彩虹变化速度 * 0.1, 1.0)
+		var 彩虹 := Color.from_hsv(彩虹相位, 彩虹饱和度, 1.0)
+		幽灵.modulate = Color(彩虹.r, 彩虹.g, 彩虹.b, 残影初始不透明度)
+	else:
+		幽灵.modulate = Color(残影颜色.r, 残影颜色.g, 残影颜色.b, 残影初始不透明度)
+
+	var 父节点 = get_parent()
+	if 父节点:
+		父节点.add_child(幽灵)
+	else:
+		return
+
+	var tween := 幽灵.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(幽灵, \"modulate:a\", 0.0, 残影存活时间)
+	tween.tween_property(幽灵, \"scale\", scale * 残影缩小比例, 残影存活时间)
+
+	tween.finished.connect(func():
+		if is_instance_valid(幽灵):
+			幽灵.queue_free()
+	)
+
+
+# ==================== 内部工具 ====================
+func _刷新图片显示() -> void:
+	if 默认图片 == null: return
+	_临时静态帧 = SpriteFrames.new()
+	_临时静态帧.add_animation(\"默认\")
+	_临时静态帧.set_animation_loop(\"默认\", false)
+	_临时静态帧.add_frame(\"默认\", 默认图片)
+	sprite_frames = _临时静态帧
+	if not Engine.is_editor_hint():
+		play(\"默认\")
+	else:
+		frame = 0 
+
+func _取字段(字典: Dictionary, 候选名: Array, 默认值):
+	for 名 in 候选名:
+		if 字典.has(名): return 字典[名]
+	return 默认值
+
+func _解析坐标(值) -> Vector2:
+	if 值 is Vector2: return 值
+	if 值 is Vector2i: return Vector2(值)
+	if 值 is Dictionary: return Vector2(float(值.get(\"x\", 0)), float(值.get(\"y\", 0)))
+	if 值 is String:
+		var 切 = 值.split(\",\")
+		if 切.size() == 2: return Vector2(float(切[0]), float(切[1]))
+	if 值 is float or 值 is int: return Vector2(值, 值)
+	return Vector2.ZERO
+"
+
+[node name="Asriel" type="AnimatedSprite2D" unique_id=1159940757]
+sprite_frames = SubResource("SpriteFrames_ruj5k")
+script = SubResource("GDScript_ubxb5")
+"默认图片" = ExtResource("1_cvoes")
